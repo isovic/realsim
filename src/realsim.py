@@ -42,7 +42,7 @@ if __name__ == '__main__':
 			sys.stderr.write('Requires no additional parameters to run.\n');
 			sys.stderr.write('\n');
 			exit(1);
-		realsim_setup.setup_all();
+		setup_realsim.setup_all();
 
 	elif (mode == 'extract'):
 		if (len(sys.argv) != 5):
