@@ -14,7 +14,8 @@ import fastqparser;
 
 ALIGNER_URL = 'http://last.cbrc.jp/last-534.zip';
 
-ALIGNER_PATH = SCRIPT_PATH + '/../aligners/last-534/src';
+# ALIGNER_PATH = SCRIPT_PATH + '/../aligners/last-534/src';
+ALIGNER_PATH = basicdefines.ALIGNERS_PATH_ROOT_ABS + '/last-534/src';
 BIN = 'lastal';
 MAPPER_NAME = 'LAST';
 
@@ -47,19 +48,19 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 	num_threads = multiprocessing.cpu_count();
 
 	if ((machine_name.lower() == 'illumina') or (machine_name.lower() == 'roche')):
-		parameters = '-v ';
+		parameters = ' ';
 
 	elif ((machine_name.lower() == 'pacbio')):
-		parameters = '-v -q 1 -r 1 -a 1 -b 1';
+		parameters = '-q 1 -r 1 -a 1 -b 1';
 
 	elif ((machine_name.lower() == 'nanopore')):
-		parameters = '-v -q 1 -r 1 -a 1 -b 1';
+		parameters = '-q 1 -r 1 -a 1 -b 1';
 
 	elif ((machine_name.lower() == 'debug')):
-		parameters = '-v ';
+		parameters = ' ';
 
 	else:			# default
-		parameters = '-v ';
+		parameters = ' ';
 
 
 
@@ -86,16 +87,21 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 		fastqparser.convert_to_fasta(reads_file, reads_fasta);
 		sys.stderr.write('\n');
 
-	# Run the indexing process, and measure execution time and memory.
-	sys.stderr.write('[%s wrapper] Generating index...\n' % (MAPPER_NAME));
-	command = '%s %s/lastdb %s %s' % (basicdefines.measure_command(memtime_file_index), ALIGNER_PATH, reference_db_file, reference_file);
-	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
-	subprocess.call(command, shell=True);
-	sys.stderr.write('\n\n');
+	if not os.path.exists(reference_db_file + '.suf'):
+		# Run the indexing process, and measure execution time and memory.
+		sys.stderr.write('[%s wrapper] Generating index...\n' % (MAPPER_NAME));
+		# command = '%s %s/lastdb %s %s' % (basicdefines.measure_command(memtime_file_index), ALIGNER_PATH, reference_db_file, reference_file);
+		command = '%s/lastdb %s %s' % (ALIGNER_PATH, reference_db_file, reference_file);
+		sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
+		subprocess.call(command, shell=True);
+		sys.stderr.write('\n\n');
+	else:
+		sys.stderr.write('[%s wrapper] Reference index already exists. Continuing.\n' % (MAPPER_NAME));
 
 	# Run the alignment process, and measure execution time and memory.
 	sys.stderr.write('[%s wrapper] Running %s...\n' % (MAPPER_NAME, MAPPER_NAME));
-	command = '%s %s/%s %s %s %s > %s' % (basicdefines.measure_command(memtime_file), ALIGNER_PATH, BIN, parameters, reference_db_file, reads_fasta, maf_file);
+	# command = '%s %s/%s %s %s %s > %s' % (basicdefines.measure_command(memtime_file), ALIGNER_PATH, BIN, parameters, reference_db_file, reads_fasta, maf_file);
+	command = '%s/%s %s %s %s > %s' % (ALIGNER_PATH, BIN, parameters, reference_db_file, reads_fasta, maf_file);
 	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
 	subprocess.call(command, shell=True);
 	sys.stderr.write('\n\n');
@@ -105,7 +111,8 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 	fp = open(sam_file, 'w');
 	fp.write(get_sam_header(reference_file));
 	fp.close();
-	command = '%s %s/../scripts/maf-convert sam %s >> %s' % (basicdefines.measure_command(memtime_file_maftosam), ALIGNER_PATH, maf_file, sam_file);
+	# command = '%s %s/../scripts/maf-convert sam %s >> %s' % (basicdefines.measure_command(memtime_file_maftosam), ALIGNER_PATH, maf_file, sam_file);
+	command = '%s/../scripts/maf-convert sam %s >> %s' % (ALIGNER_PATH, maf_file, sam_file);
 	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
 	subprocess.call(command, shell=True);
 	sys.stderr.write('\n\n');

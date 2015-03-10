@@ -57,12 +57,15 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 	memtime_file = '%s/%s.memtime' % (output_path, output_filename);
 	memtime_file_index = '%s/%s-index.memtime' % (output_path, output_filename);
 	
-	# Run the indexing process, and measure execution time and memory.
-	sys.stderr.write('[%s wrapper] Generating index...\n' % (MAPPER_NAME));
-	command = '%s %s/alignment/bin/sawriter %s.blasrsa %s' % (basicdefines.measure_command(memtime_file_index), ALIGNER_PATH, reference_file, reference_file);
-	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
-	subprocess.call(command, shell=True);
-	sys.stderr.write('\n\n');
+	if (not os.path.exists(reference_file + '.blasrsa')):
+		# Run the indexing process, and measure execution time and memory.
+		sys.stderr.write('[%s wrapper] Generating index...\n' % (MAPPER_NAME));
+		command = '%s %s/alignment/bin/sawriter %s.blasrsa %s' % (basicdefines.measure_command(memtime_file_index), ALIGNER_PATH, reference_file, reference_file);
+		sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
+		subprocess.call(command, shell=True);
+		sys.stderr.write('\n\n');
+	else:
+		sys.stderr.write('[%s wrapper] Reference index already exists. Continuing.\n' % (MAPPER_NAME));
 
 	# Run the alignment process, and measure execution time and memory.
 	sys.stderr.write('[%s wrapper] Running %s...\n' % (MAPPER_NAME, MAPPER_NAME));

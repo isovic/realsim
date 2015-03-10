@@ -12,7 +12,8 @@ import multiprocessing;
 import basicdefines;
 
 ALIGNER_URL = 'https://github.com/lh3/bwa.git';
-ALIGNER_PATH = SCRIPT_PATH + '/../aligners/bwa/';
+# ALIGNER_PATH = SCRIPT_PATH + '/../aligners/bwa/';
+ALIGNER_PATH = basicdefines.ALIGNERS_PATH_ROOT_ABS + '/bwa';
 BIN = 'bwa';
 MAPPER_NAME = 'BWAMEM';
 
@@ -57,16 +58,21 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 	memtime_file = '%s/%s.memtime' % (output_path, output_filename);
 	memtime_file_index = '%s/%s-index.memtime' % (output_path, output_filename);
 	
-	# Run the indexing process, and measure execution time and memory.
-	sys.stderr.write('[%s wrapper] Generating index...\n' % (MAPPER_NAME));
-	command = '%s %s/%s index %s' % (basicdefines.measure_command(memtime_file_index), ALIGNER_PATH, BIN, reference_file);
-	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
-	subprocess.call(command, shell=True);
-	sys.stderr.write('\n\n');
+	if (not os.path.exists(reference_file + '.bwt')):
+		# Run the indexing process, and measure execution time and memory.
+		sys.stderr.write('[%s wrapper] Generating index...\n' % (MAPPER_NAME));
+		# command = '%s %s/%s index %s' % (basicdefines.measure_command(memtime_file_index), ALIGNER_PATH, BIN, reference_file);
+		command = '%s/%s index %s' % (ALIGNER_PATH, BIN, reference_file);
+		sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
+		subprocess.call(command, shell=True);
+		sys.stderr.write('\n\n');
+	else:
+		sys.stderr.write('[%s wrapper] Reference index already exists. Continuing.\n' % (MAPPER_NAME));
 
 	# Run the alignment process, and measure execution time and memory.
 	sys.stderr.write('[%s wrapper] Running %s...\n' % (MAPPER_NAME, MAPPER_NAME));
-	command = '%s %s/%s mem %s %s %s > %s' % (basicdefines.measure_command(memtime_file), ALIGNER_PATH, BIN, parameters, reference_file, reads_file, sam_file);
+	# command = '%s %s/%s mem %s %s %s > %s' % (basicdefines.measure_command(memtime_file), ALIGNER_PATH, BIN, parameters, reference_file, reads_file, sam_file);
+	command = '%s/%s mem %s %s %s > %s' % (ALIGNER_PATH, BIN, parameters, reference_file, reads_file, sam_file);
 	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
 	subprocess.call(command, shell=True);
 	sys.stderr.write('\n\n');

@@ -2,11 +2,9 @@
 
 import os
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__));
-
 import sys
 sys.path.append(SCRIPT_PATH + '');
 sys.path.append(SCRIPT_PATH + '/wrappers');
-
 import subprocess;
 
 import basicdefines;
