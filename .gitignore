@@ -1,0 +1,8 @@
+*.fasta
+*.fastq
+*.fa
+*.fq
+*.sam
+*.maf
+*.pyc
+*.log
