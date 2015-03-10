@@ -6,3 +6,5 @@
 *.maf
 *.pyc
 *.log
+intermediate/
+tools/
