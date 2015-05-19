@@ -47,17 +47,21 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 		parameters = '-t %s' % str(num_threads);
 
 
+	# Increase penalty for clipping from default 5 to 20
+	# KK: Didn't seem to have significant effect
+	parameters = parameters + ' -L 20'
+
 
 	if (output_suffix != ''):
 		output_filename = '%s-%s' % (MAPPER_NAME, output_suffix);
 	else:
 		output_filename = MAPPER_NAME;
-	
+
 	reads_basename = os.path.splitext(os.path.basename(reads_file))[0];
 	sam_file = '%s/%s.sam' % (output_path, output_filename);
 	memtime_file = '%s/%s.memtime' % (output_path, output_filename);
 	memtime_file_index = '%s/%s-index.memtime' % (output_path, output_filename);
-	
+
 	if (not os.path.exists(reference_file + '.bwt')):
 		# Run the indexing process, and measure execution time and memory.
 		sys.stderr.write('[%s wrapper] Generating index...\n' % (MAPPER_NAME));
@@ -76,7 +80,7 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
 	subprocess.call(command, shell=True);
 	sys.stderr.write('\n\n');
-	
+
 	sys.stderr.write('[%s wrapper] %s wrapper script finished processing.\n' % (MAPPER_NAME, MAPPER_NAME));
 
 	return sam_file

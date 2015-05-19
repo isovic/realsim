@@ -29,6 +29,65 @@
 import os;
 import sys;
 import utility_sam;
+import fastqparser
+
+
+def combine_msa_output(combinedoutputpath, msaoutputpath, sam_hash_bwamem, sam_hash_lastal, windowstart=0):
+
+	with open(combinedoutputpath, 'w') as combinedoutputfile:
+		msaoutput = fastqparser.read_fastq(msaoutputpath)
+		headers = msaoutput[0]
+		seqs = msaoutput[1]
+
+		# if there is nothing to write just exit
+		if len(headers) == 0:
+			sys.stderr.out('\n\nNo output to combine!\n')
+			return
+
+
+		# first line (index 0) is for reference
+		combinedoutputfile.write(headers[0] + '\n')
+		combinedoutputfile.write(seqs[0] + '\n')
+
+		# noting where MSA put inserts into reference sequence
+		# each field in list refinserts contains the number of inserts in
+		# reference sequence up to and including that point
+		numins = 0
+		refinserts = [0] * len(seqs[0])
+		for i in xrange(len(refinserts)):
+			if seqs[0][i] == '-':
+				numins += 1
+			refinserts[i] = numins
+
+
+		for i in xrange(1, len(headers)):
+
+			# writing sequence and header from MAFFT output
+			combinedoutputfile.write(headers[i] + '\n')
+			combinedoutputfile.write(seqs[i] + '\n')
+
+			# getting sequence data from BWA SAM
+			samline = sam_hash_bwamem[headers[i]][0]
+			combinedoutputfile.write('BWA_' + headers[i] + '\n')
+			# prefix = '-'*samline.clipped_pos							# to correctly position sequence from SAM
+			# clipped pos didnt seem to work, so trying just pos
+			# taking into account that reference sequence can have inserts, -1 is because pos is one-based
+			# BWA uses soft clipping so I'm using clipped_pos
+			prefix = '-'*(samline.clipped_pos - windowstart + refinserts[samline.clipped_pos - windowstart] - 1)
+			combinedoutputfile.write(prefix + samline.seq + '\n')
+			combinedoutputfile.write(prefix + samline.cigar + '\n')
+
+			# getting sequence data from LAST SAM
+			samline = sam_hash_lastal[headers[i]][0]
+			combinedoutputfile.write('LAST_' + headers[i] + '\n')
+			# prefix = '-'*samline.clipped_pos							# to correctly position sequence from SAM
+			# clipped pos didnt seem to work, so trying just pos
+			# taking into account that reference sequence can have inserts, -1 is because pos is one-based
+			# LAST uses hard clipping so I'm using samline.pos
+			prefix = '-'*(samline.pos - windowstart + refinserts[samline.pos - windowstart] - 1)
+			combinedoutputfile.write(prefix + samline.seq + '\n')
+			combinedoutputfile.write(prefix + samline.cigar + '\n')
+
 
 def compare_two_sams(sam_file1, sam_file2, distance_threshold, out_summary_prefix=''):
 
@@ -57,7 +116,7 @@ def compare_two_sams(sam_file1, sam_file2, distance_threshold, out_summary_prefi
 
 	num_processed = 0;
 
-	for qname in sam_hash1.keys():
+	for qname in sam_hash1.iterkeys():
 		num_processed += 1;
 		sys.stderr.write('\rProcessed %d alignments...' % num_processed);
 
@@ -128,11 +187,11 @@ def compare_two_sams(sam_file1, sam_file2, distance_threshold, out_summary_prefi
 
 	sys.stderr.write('\n');
 	sys.stderr.write('Counting qnames present in sam_file2 that are missing from sam_file1...\n');
-	for qname in sam_hash2.keys():
+	for qname in sam_hash2.iterkeys():
 		if (len(sam_hash2[qname]) > 0):
 			if (sam_hash2[qname][0].IsMapped() == True):
 				num_mapped_2 += 1;
-			if (qname in sam_hash1.keys()):
+			if (qname in sam_hash1.iterkeys()):
 				pass;
 			else:
 				not_in_sam_file1 += 1;
@@ -143,7 +202,7 @@ def compare_two_sams(sam_file1, sam_file2, distance_threshold, out_summary_prefi
 	out_file = out_summary_prefix + '.csv';
 	out_file_lt0bp = out_summary_prefix + '_lt0bp.csv';
 	out_file_gt5000bp = out_summary_prefix + '_gt5000bp.csv';
-	
+
 	if (out_summary_prefix != ''):
 		try:
 			fp_out = open(out_file, 'w');
@@ -179,9 +238,9 @@ def compare_two_sams(sam_file1, sam_file2, distance_threshold, out_summary_prefi
 
 	num_same_alignments = 0;
 	i = 0;
-	# while i < len(distance_to_qname_hash.keys()
+	# while i < len(distance_to_qname_hash.iterkeys()
 	# print distance_to_qname_hash;
-	for distance in sorted(distance_to_qname_hash.keys()):
+	for distance in sorted(distance_to_qname_hash.iterkeys()):
 		sorted_by_length = sorted(distance_to_sam_hash[distance], reverse=True, key=lambda sam_line: len(sam_line.seq));
 		# sorted_qnames = ['%s <%d, %d>' % (single_sam_line.qname, len(single_sam_line.seq), single_sam_line.mapq) for single_sam_line in sorted_by_length];
 		sorted_qnames = ['%s <%d>' % (single_sam_line.qname, len(single_sam_line.seq)) for single_sam_line in sorted_by_length];
@@ -236,7 +295,7 @@ if __name__ == "__main__":
 		sys.stderr.write('\n');
 		sys.stderr.write('\tdistance_threshold - default value is 100\n');
 		exit(1);
-	
+
 	sam_file1 = sys.argv[1];
 	sam_file2 = sys.argv[2];
 	distance_threshold = 100;
@@ -247,7 +306,7 @@ if __name__ == "__main__":
 
 	if (len(sys.argv) >= 5):
 		out_summary_prefix = sys.argv[4];
-	
+
 	compare_two_sams(sam_file1, sam_file2, distance_threshold, out_summary_prefix);
 
 	# print 'Percent correctly mapped bases: %.2f' % CompareCigars(sam_file, sam_reference_file, out_summary_prefix);

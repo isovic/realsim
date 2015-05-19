@@ -1,14 +1,16 @@
 #! /usr/bin/python
 
-import os;
-import re;
-import sys;
+import os
+import re
+import sys
+from collections import defaultdict
 
 CIGAR_OPERATIONS_ALL = ['M', 'I', 'D', 'N', 'S', 'H', 'P', '=', 'X'];
 CIGAR_OPERATIONS_BASIC = ['M', 'I', 'D', 'S', 'H'];
 CIGAR_OPERATIONS_EXTENDED = ['M', 'I', 'D', 'S', 'H', '=', 'X'];
 
-
+# Global table containing mutation counts
+mutCntTable = {letter: defaultdict(int) for letter in ('A', 'T', 'G', 'C')}
 
 class SAMLine:
 	def __init__(self, line='', sam_basename=''):
@@ -32,7 +34,7 @@ class SAMLine:
 		self.qual = '';
 		self.optional = {};
 		self.original_line = '';
-		
+
 		# (II) These parameters are parsed from the parameters parsed from the SAM file.
 		self.clipped_pos = 0;			# If the read has clipping operation at the beginning, then self.clipped_pos = self.pos - num_clipped_bases . This is to allow easy comparison to the reference.
 		self.clip_op_front = '';
@@ -40,7 +42,7 @@ class SAMLine:
 		self.clip_op_back = '';
 		self.clip_count_back = 0;
 		self.chosen_quality = 0;			# In SAM, quality can be specified either as mapping quality (mapq), or as alignment score (AS optional parameter). For instance, LAST outputs AS, and not mapq. If mapq == 255, then it will be checked if there is an AS entry in the given optional parameters. If AS is not present, then self.chose_quality will be equal to self.mapq, that is, 255.
-		
+
 		# (III) These parameters are modified during evaluation of mapping.
 		self.evaluated = 0;
 		self.is_correct_ref_and_orient = 0;
@@ -49,14 +51,14 @@ class SAMLine:
 		self.actual_ref_reverse = 0;
 		self.is_filtered_out = False;
 		self.num_occurances_in_sam_file = 0;
-		
+
 		self.is_header_deformed = 0;
 		self.actual_ref_header = '';
 		self.trimmed_header = '';
 		self.actual_ref_pos = 0;
 		self.mapped_pos_with_shift = 0;
 		self.min_distance = -1;
-		
+
 		self.sam_basename = '';
 
 		# For sanity checking - this is True if the SAM line contains all fields. It is false i.e. if file writing was interrupted before line was finished.
@@ -67,19 +69,19 @@ class SAMLine:
 			#self.qname, self.flag, self.rname, self.pos, self. mapq, self.is_header_deformed, int(self.is_correct_ref_and_orient), int(self.is_duplicate), int(self.is_best_of_duplicates), self.actual_ref_pos, self.mapped_pos_with_shift, self.min_distance, str(self.IsSecondary()), self.actual_ref_reverse, self.IsReverse(), self.IsPaired());
 		line = 'qname = %s\tactual_ref_pos = %d\tmapped_pos_with_shift = %d\tmin_distance = %d\tmapq = %d\tactual_ref_reverse = %d\treverse = %d\tis_correct_ref_and_orient = %d\tis_header_deformed = %d\tflag = %d\trname = %s\tpos = %d\tis_duplicate = %d\tis_filtered_out = %d\tis_best_of_duplicates = %d\tsecondary = %s\tpaired = %s\t' % (
 			self.qname, self.actual_ref_pos, self.mapped_pos_with_shift, self.min_distance, self.mapq, self.actual_ref_reverse, self.IsReverse(), int(self.is_correct_ref_and_orient), self.is_header_deformed, self.flag, self.rname, self.pos, int(self.is_duplicate), int(self.is_filtered_out), int(self.is_best_of_duplicates), str(self.IsSecondary()), self.IsPaired());
-		
+
 		return line;
 
 	def ParseLine(self, line, sam_basename=''):
 		split_line = line.split('\t');
-		
+
 		if len(split_line) < 11:
 			print 'ERROR: Line does not contain all mandatory SAM fields!';
 			print 'Line: "%s"' % line;
 			self.Clear();
 			self.line_fields_ok = False;
 			return;
-		
+
 		self.original_line = line;
 
 		self.qname = split_line[0];
@@ -93,7 +95,7 @@ class SAMLine:
 		self.isize = int(split_line[8]);
 		self.seq = split_line[9];
 		self.qual = split_line[10];
-		
+
 		self.optional = {};
 		i = 11;
 		while i < len(split_line):
@@ -101,43 +103,43 @@ class SAMLine:
 			if (len(split_optional) < 2):
 				i += 1;
 				continue;
-			self.optional[split_optional[0].strip()] = split_optional[-1].strip();		# Example of an optional parameter: AS:i:717 .
+			self.optional[split_optional[0].strip()] = split_optional[-1].strip();		# Example of an optional parameter: AS:i:717
 			i += 1;
-		
+
 		self.chosen_quality = self.mapq + 0;
 		if (self.chosen_quality == 255):
 			try:
 				self.chosen_quality = int(self.optional['AS']);
 			except:
 				pass;
-		
+
 		self.evaluated = 0;
 		self.is_correct_ref_and_orient = 0;
 		self.is_duplicate = 0;
 		self.is_best_of_duplicates = 0;
 		self.actual_ref_reverse = 0;
 		self.is_filtered_out = False;
-		
+
 		self.is_header_deformed = 0;
 		self.actual_ref_header = '';
 		self.trimmed_header = '';
 		self.actual_ref_pos = 0;
 		self.mapped_pos_with_shift = 0;		# This is assigned only after evaluation of the mapping position. It is equal to self.clipped_pos if self.qname is found in the reference SAM file, otherwise it is equal to 0.
 		self.min_distance = -1;
-		
+
 		self.clipped_pos = self.pos;		# The position of the read subtracted by the amount of clipped bases at the begining of the read.
 		self.clip_op_front = '';
 		self.clip_count_front= 0;
 		self.clip_op_back = '';
 		self.clip_count_back = 0;
 		self.num_occurances_in_sam_file = 1;
-		
+
 		self.sam_basename = sam_basename;
-		
+
 		if (len(self.cigar) > 0 and self.cigar != '*'):
 			m_front = re.match("^([\d]+)([SH])", self.cigar);
 			m_back = re.match(".*[MIDNSHP=X]([\d]+)([SH])$", self.cigar);
-			
+
 			if (m_front):
 				cigarcount = int(m_front.group(1));
 				cigarop = m_front.group(2);
@@ -155,7 +157,7 @@ class SAMLine:
 		#if (self.pos != self.clipped_pos):
 			#print 'Clipped position: %d (original: %d, clip_op = %s, clip_count = %d)' % (self.clipped_pos, self.pos, self.clip_op, self.clip_count);
 		self.line_fields_ok = True;
-	
+
 	def Verbose(self):
 		print 'qname = %s' % self.qname;
 		print 'flag = %s' % self.flag;
@@ -175,16 +177,16 @@ class SAMLine:
 		print '(is_filtered_out = %d)' % self.is_filtered_out;
 		print '(is_best_of_duplicates = %d)' % self.is_best_of_duplicates;
 		print '(clipped_pos = %d)' % self.clipped_pos;
-	
+
 	def FormatAccuracy(self):
 		line = '';
-		
+
 		#query.min_distance = ret_min_distance;
 		#query.actual_ref_pos = ret_reference_pos;
 		#query.actual_ref_reverse = ret_ref_reverse;
 		#query.actual_ref_header = ret_ref_header;
 		#query.mapped_pos_with_shift = ret_mapped_pos;
-		
+
 		line += 'distance = %d\t' % self.min_distance;
 		line += 'header_hit = %s\t' % (str(self.rname == self.actual_ref_header));
 		line += 'reverse_hit = %s\t' % (str(self.actual_ref_reverse == self.IsReverse()));
@@ -202,24 +204,24 @@ class SAMLine:
 		line += 'cigar_end = %s\t' % (self.cigar[(len(self.cigar)-5):]);
 		line += 'chosen_quality = %d\t' % (self.chosen_quality);
 		line += 'num_occ = %d' % (self.num_occurances_in_sam_file);
-		
+
 		return line;
-	
-		
-	
+
+
+
 	# Checks the SAM flag to see if the read is paired end.
 	def IsPaired(self):
 		return (True if (self.flag & 0x01) else False);
-	
+
 	# Checks the SAM flag to see if the alignment is reported as mapped.
 	def IsMapped(self):
 		return (False if (self.flag & 0x04) else True);
 		#return (True if (self.flag & 0x04) else False);
-	
+
 	# Checks the SAM flag to see if the SEQ was reversed.
 	def IsReverse(self):
 		return (True if (self.flag & 0x10) else False);
-	
+
 	# Checks the SAM flag to see if this is a secondary alignment.
 	def IsSecondary(self):
 		return (True if (self.flag & 0x100) else False);
@@ -246,10 +248,10 @@ class SAMLine:
 			print 'cigarcount_string: ', cigarcount_string
 			print 'i = ', i;
 			print self.original_line
-			
+
 			cigar_operations = [];
 		return cigar_operations;
-	
+
 	# Splits the CIGAR string into individual operations. Unlike SplitCigar,
 	# this function also converts the extended cigar format to the basic cigar
 	# format. This includes counting the number of successive M, = and X operations.
@@ -265,7 +267,7 @@ class SAMLine:
 			if (self.cigar[i] in CIGAR_OPERATIONS_EXTENDED):
 				# Check if it is a match/mismatch operation and convert to M:
 				if (self.cigar[i] in 'M=X'):
-					# If it is a match/m[headers, sam_lines]ismatch and the list is empty, simply add it.
+					# If it is a match/mismatch and the list is empty, simply add it.
 					if (len(cigar_operations) == 0):
 						cigar_operations.append([int(cigarcount_string), 'M']);
 					# If the list is not empty, check if the previous operation was an 'M'.
@@ -285,10 +287,106 @@ class SAMLine:
 			print 'cigarcount_string: ', cigarcount_string
 			print 'i = ', i;
 			print self.original_line
-			
+
 			cigar_operations = [];
 		return cigar_operations;
-	
+
+
+	# Calculates and returns extended cigar string
+	# = - match, X - mismatch
+	# Compares all M operations areas with the reference genome to find mismaches
+	def CalcExtendedCIGAR(self, reference):
+		extcigar = ''
+		operations = self.SplitCigar()
+		refpos = self.pos-1	# start of alignment within referece, clipped bases are skipped
+							# -1 is beacuse SAM position is one based!
+		seqpos = 0			# startng position within original sequence
+
+		for op in operations:
+			opsize = op[0]
+			optype = op[1]
+			if optype == 'M':
+				mcigar = getExtendedCIGAR(reference[refpos:refpos+opsize], self.seq[seqpos:seqpos+opsize])
+				extcigar += mcigar
+				refpos += opsize
+				seqpos += opsize
+			elif optype in 'IS':
+				seqpos += opsize
+				extcigar += '%s%s' % (opsize, optype)
+			elif optype == 'D':
+				refpos += opsize
+				extcigar += '%s%s' % (opsize, optype)
+			elif optype == 'H':
+				extcigar += '%s%s' % (opsize, optype)
+			else:
+				print 'ERROR: Faulty basic CIGAR string operation!'
+				print 'operation: %s%s' % (opsize, optype)
+				print 'self.cigar'
+
+		return extcigar
+
+
+	# Calculates a GC content of a given read by looking at corresponding bases in the reference
+	def CalcGCContent(self, reference):
+		GCcontent = 0.0
+		GCcount = 0
+		length = self.CalcReferenceLengthFromCigar()
+		refpos = self.pos-1
+
+		for base in reference[pos:pos+length]:
+			if base in 'GC':
+				GCcount += 1
+
+		GCcontent = float(GCcount)/length
+
+		return GCcontent
+
+
+	# Calculates both extended CIGAR and GC content at the same time
+	# To pass reference as an argument only once
+	def CalcExtendedCIGARandGCContent(self, reference):
+		GCcontent = 0.0
+		GCcount = 0
+		length = self.CalcReferenceLengthFromCigar()
+		extcigar = ''
+		operations = self.SplitCigar()
+		refpos = self.pos-1	# start of alignment within referece, clipped bases are skipped
+							# -1 is beacuse SAM position is one based!
+		seqpos = 0			# startng position within original sequence
+
+		for base in reference[refpos:refpos+length]:
+			if base in 'GC':
+				GCcount += 1
+
+		# Calculating GC content
+		GCcontent = float(GCcount)/length
+
+		# Calculating extended CIGAR
+		for op in operations:
+			opsize = op[0]
+			optype = op[1]
+			if optype == 'M':
+				mcigar = getExtendedCIGAR(reference[refpos:refpos+opsize], self.seq[seqpos:seqpos+opsize])
+				extcigar += mcigar
+				refpos += opsize
+				seqpos += opsize
+			elif optype in 'IS':
+				seqpos += opsize
+				extcigar += '%s%s' % (opsize, optype)
+			elif optype == 'D':
+				refpos += opsize
+				extcigar += '%s%s' % (opsize, optype)
+			elif optype == 'H':
+				extcigar += '%s%s' % (opsize, optype)
+			else:
+				print 'ERROR: Faulty basic CIGAR string operation!'
+				print 'operation: %s%s' % (opsize, optype)
+				print 'self.cigar'
+
+		return extcigar, GCcontent
+
+
+
 	# Sums the counts of M/I/S/=/X operations in the CIGAR string to determine the
 	# length of SEQ. This is used for testing, debugging and sanity checking. If the
 	# SAM line has been properly formatted, the result of this function should be
@@ -352,24 +450,24 @@ class SAMLine:
 	# for sam_line in sam_lines:
 	#	cigar_pos_list = sam_line.CalcCigarStartingPositions();
 	#	print cigar_pos_list;
-	
+
 	def CalcCigarStartingPositions(self, separate_matches_in_individual_bases=False):
 		#cigar_list = self.SplitCigar();
 		cigar_list = self.SplitCigarInBasicFormat();
 		cigar_pos_list = [];
 		pos_on_reference = self.clipped_pos + 0;
 		pos_on_read = 0;
-		
+
 		i = 0;
 		while (i < len(cigar_list)):
 			cigar_count = cigar_list[i][0];
 			cigar_op = cigar_list[i][1];
-			
+
 			if (separate_matches_in_individual_bases == False):
 				cigar_pos_list.append([cigar_count + 0, cigar_op + '', pos_on_reference + 0]);
 				#if (cigar_op in 'MDSH=X'):
 					#pos_on_reference += cigar_count;
-				
+
 				# S and H are also used to walk down the reference, because pos_on_reference was initialized
 				# with self.clipped_pos, which is calculated from the SAM pos field by subtracting the number
 				# of clipped bases. Otherwise, S and H should not be used to increase pos_on_reference.
@@ -380,7 +478,7 @@ class SAMLine:
 					pos_on_reference += cigar_count;
 				elif (cigar_op == 'I'):
 					pos_on_read += cigar_count;
-					
+
 			else:
 				if ((cigar_op in 'M=X') == False):
 					cigar_pos_list.append([cigar_count + 0, cigar_op + '', pos_on_reference + 0, pos_on_read + 0]);
@@ -398,11 +496,11 @@ class SAMLine:
 						pos_on_reference += 1;
 						pos_on_read += 1;
 						j += 1;
-			
+
 			i += 1;
-		
+
 		return cigar_pos_list;
-	
+
 	def CalcNumMappedBases(self):
 		num_mapped_bases = len(self.seq);
 		if (self.clip_op_front == 'S'):
@@ -443,9 +541,63 @@ class SAMLine:
 
 		return True;
 
-	
 
 
+
+# A helper function.
+# Takes two string of the same length and return corresponding
+# extended CIGAR string looking only at matches and mismatches
+# = - match, X - mismatch
+# Used to break up longer M operations in basic CIGAR into multiple = and X operations
+# If attribute countMutations is set to True, function also counts different mutations
+# considering string1 as reference and string2 as a read
+def getExtendedCIGAR(string1, string2, countMutations = True):
+	if len(string1) != len(string2):
+		raise Exception('Cannot callculate extended CIGAR for strings of different length!')
+
+	match = '='
+	mismatch = 'X'
+	skipped = 'N'
+
+	extcigar = ''
+	# checking first characters to determine first operation
+	if string1[0] == 'N' or string2[0] == 'N':
+		optype = skipped
+	elif string1[0] == string2[0]:
+		optype = match
+	else:
+		optype = mismatch
+		if countMutations:
+			mutCntTable[string1[0]][string2[0]] += 1
+	opsize = 1
+
+	# checking other characeters
+	for i in xrange(1, len(string1)):
+		if string1[i] == 'N' or string2[i] == 'N':
+			newoptype = skipped
+		elif string1[i] == string2[i]:
+			newoptype = match
+		else:
+			newoptype = mismatch
+			if countMutations:
+				mutCntTable[string1[i]][string2[i]] += 1
+
+		if newoptype == optype:
+			opsize += 1
+		else :
+			extcigar += '%d%s' % (opsize, optype)
+			optype = newoptype
+			opsize = 1
+
+	# Last operations was not noted in CIGAR string
+	extcigar += '%d%s' % (opsize, optype)
+
+	return extcigar
+
+
+# Functions for working with global mutation count table
+def init_mutCntTable():
+	mut_cnt_table = {letter: defaultdict(int) for letter in ('A', 'T', 'G', 'C')}
 
 
 def LoadSAM(sam_path, verbose=False):
@@ -454,10 +606,10 @@ def LoadSAM(sam_path, verbose=False):
 	except IOError:
 		print 'ERROR: Could not open file "%s" for reading!' % sam_path;
 		return [[], []];
-	
+
 	headers = [];
 	sam_lines = [];
-	
+
 	i = 0;
 	for line in fp_reference:
 		i += 1;
@@ -472,10 +624,10 @@ def LoadSAM(sam_path, verbose=False):
 		sam_line = SAMLine(line);
 		sam_lines.append(sam_line);
 	fp_reference.close();
-	
+
 	if (verbose == True):
 		sys.stdout.write('done!\n');
-	
+
 	return [headers, sam_lines];
 
 def LoadOnlySAMHeaders(sam_path, verbose=False):
@@ -484,9 +636,9 @@ def LoadOnlySAMHeaders(sam_path, verbose=False):
 	except IOError:
 		print 'ERROR: Could not open file "%s" for reading!' % sam_path;
 		return [];
-	
+
 	headers = [];
-	
+
 	i = 0;
 	for line in fp_reference:
 		i += 1;
@@ -501,10 +653,10 @@ def LoadOnlySAMHeaders(sam_path, verbose=False):
 		else:
 			break;
 	fp_reference.close();
-	
+
 	if (verbose == True):
 		sys.stdout.write('done!\n');
-	
+
 	return headers;
 
 # Hashes the entries from a SAM file by their QNAME for faster lookup during comparison.
@@ -514,44 +666,44 @@ def HashSAM(sam_path):
 	except IOError:
 		print 'ERROR: Could not open file "%s" for reading!' % sam_path;
 		return [{}, 0];
-	
+
 	ret = {};
-	
+
 	num_unique_references = 0;
 	num_references = 0;
-	
+
 	for line in fp_reference:
 		line = line.strip();
-		
+
 		if len(line) == 0:
 			continue;
-		
+
 		if line[0] == '@':
 			continue;
-		
+
 		sam_line = SAMLine(line);
-		
+
 		modified_qname = sam_line.qname;
 		#modified_qname = '/'.join(sam_line.qname.split('/')[:-1]);
-		
+
 		try:
 			current_hash = ret[modified_qname];
-			
+
 			should_be_counted = True;
-			
+
 			# We have to check if this sequence is actually a paired read of another sequence, or there is something funny in the data.
 			for existing_sam in current_hash:
 				if (sam_line.IsSecondary() == True) or (sam_line.IsSecondary() == existing_sam.IsSecondary() and sam_line.IsReverse() == existing_sam.IsReverse()):
 					# This case should not be counted. It means that, either the alignment is marked as secondary which means there should be a primary alignment as well, or that there is more than one primary alignment, and the orientation is the same, which means that an aligner is trying to artificially boost-up their statistics.
 					should_be_counted = False;
 					break;
-				
-			
+
+
 			#if sam_line.qname == 'gi|48994873|gb|U00096.2|-463960':
 				#print line;
 				#for sam in ret[sam_line.qname]:
 					#print 'is_secondary: %s, is_reverse = %s, num_unique_references: %d' % (str(sam.IsSecondary()), str(sam.IsReverse()), num_unique_references);
-			
+
 			if should_be_counted == True:
 				num_unique_references += 1;	# Count only unique sequences.
 				#print 'Tu sam 2!';
@@ -565,22 +717,22 @@ def HashSAM(sam_path):
 			ret[modified_qname] = [sam_line];
 			if sam_line.IsSecondary() == False:
 				num_unique_references += 1;	# Count only unique sequences, but not secondary ones.
-				
+
 
 			#if sam_line.qname == 'gi|48994873|gb|U00096.2|-463960':
 				#print line;
 				#if sam_line.IsSecondary() == False:
 					#print 'Tu sam 1!';
-					
+
 				#print '---';
 
 		#if sam_line.qname == 'gi|48994873|gb|U00096.2|-463960':
 			#for sam in ret[sam_line.qname]:
 				#print 'is_secondary: %s, is_reverse = %s, num_unique_references: %d' % (str(sam.IsSecondary()), str(sam.IsReverse()), num_unique_references);
 			#print '---';
-			
+
 		num_references += 1;	# Count only unique sequences.
-		
+
 	fp_reference.close();
 
 	for key in ret.keys():
@@ -595,44 +747,44 @@ def HashSAMWithFilter(sam_path, qname_hash_to_filter):
 	except IOError:
 		print 'ERROR: Could not open file "%s" for reading!' % sam_path;
 		return [{}, 0, 0];
-	
+
 	ret = {};
-	
+
 	num_unique_references = 0;
 	num_references = 0;
-	
+
 	for line in fp_reference:
 		line = line.strip();
-		
+
 		if len(line) == 0:
 			continue;
-		
+
 		if line[0] == '@':
 			continue;
-		
+
 		sam_line = SAMLine(line);
-		
+
 		modified_qname = sam_line.qname;
 		#modified_qname = '/'.join(sam_line.qname.split('/')[:-1]);
-		
+
 		try:
 			if (qname_hash_to_filter[modified_qname] == 1):
 				sam_line.is_filtered_out = True;
 		except:
 				sam_line.is_filtered_out = False;
-		
+
 		try:
 			current_hash = ret[modified_qname];
-			
+
 			should_be_counted = True;
-			
+
 			# We have to check if this sequence is actually a paired read of another sequence, or there is something funny in the data.
 			for existing_sam in current_hash:
 				if (sam_line.IsSecondary() == True) or (sam_line.IsSecondary() == existing_sam.IsSecondary() and sam_line.IsReverse() == existing_sam.IsReverse()):
 					# This case should not be counted. It means that, either the alignment is marked as secondary which means there should be a primary alignment as well, or that there is more than one primary alignment, and the orientation is the same, which means that an aligner is trying to artificially boost-up their statistics.
 					should_be_counted = False;
 					break;
-			
+
 			if should_be_counted == True and sam_line.is_filtered_out == False:
 				num_unique_references += 1;	# Count only unique sequences.
 
@@ -644,28 +796,28 @@ def HashSAMWithFilter(sam_path, qname_hash_to_filter):
 			if sam_line.IsSecondary() == False and sam_line.is_filtered_out == False:
 				num_unique_references += 1;	# Count only unique sequences, but not secondary ones.
 		num_references += 1;	# Count only unique sequences.
-		
+
 	fp_reference.close();
-	
+
 	for key in ret.keys():
 		ret[key].sort(reverse=True, key=lambda sam_line: sam_line.chosen_quality);
-	
+
 	return [ret, num_references, num_unique_references];
 
 # This is deprecated, should be removed.
 def CheckSamModified(sam_filename, out_path_prefix):
 	sam_timestamp = str(os.path.getmtime(sam_filename));
-	
+
 	path_roc = out_path_prefix + '.roc';
 	path_sum = out_path_prefix + '.sum';
-	
+
 	lines = [];
-	
+
 	try:
 		fp_sum = open(path_sum, 'r');
 		lines = fp_sum.readlines();
 		fp_sum.close();
-		
+
 		fp_sum = open(path_roc, 'r');
 		fp_sum.close();
 	except IOError:
@@ -678,10 +830,10 @@ def CheckSamModified(sam_filename, out_path_prefix):
 			if len(split_line) < 2:
 				continue;
 			last_sam_timestamp = split_line[1].strip();
-			
+
 			if last_sam_timestamp == sam_timestamp:
 				return [False, sam_timestamp];
-			
+
 			break;
 
 	return [True, sam_timestamp];
@@ -693,7 +845,7 @@ def CheckSamModified(sam_filename, out_path_prefix):
 # the Illumina and Roche headers.
 def TrimHeader(header):
 	ret = header;
-	
+
 	illumina_re = r'^(.*_[\d]+)-[12]';
 	roche_re = r'^(.*-[\d]+)/[12]';
 	match_header = None;
@@ -701,39 +853,39 @@ def TrimHeader(header):
 		match_header = re.match(illumina_re, header);
 	if match_header == None:
 		match_header = re.match(roche_re, header);
-		
+
 	if match_header:
-		ret = str(match_header.group(1));	
-	
+		ret = str(match_header.group(1));
+
 	return ret;
 
 def GetExecutionTime(sam_file):
 	time_file = sam_file[0:-3] + 'time';
-	
+
 	try:
 		fp_time = open(time_file, 'r');
 		execution_time = fp_time.readline();
 		fp_time.close();
-		
+
 		return execution_time;
 	except IOError:
 		return 'Execution time measurements not found!'
-	
+
 def GetExecutionStats(sam_file):
 	time_file = sam_file[0:-3] + 'memtime';
-	
+
 	try:
 		fp_time = open(time_file, 'r');
 		lines = fp_time.readlines();
 		fp_time.close();
-		
+
 	except IOError:
 		return 'Execution time measurements not found!'
-	
+
 	#for line in lines:
 		#line = line.strip();
 		#line
-	
+
 	return ('\t' + '\n\t'.join([line.strip() for line in lines]));
 
 def WriteSamLines(sam_lines, output_path):
@@ -755,7 +907,7 @@ def GetBasicStats(sam_lines, allowed_distance=1):
 	true_positive = 0;
 	false_positive = 0;
 	not_mapped = 0;
-	
+
 	for sam_line in sam_lines:
 		if (sam_line.IsMapped() and sam_line.is_duplicate == 0):
 			if (sam_line.is_correct_ref_and_orient == 1 and sam_line.min_distance <= allowed_distance):
@@ -765,23 +917,23 @@ def GetBasicStats(sam_lines, allowed_distance=1):
 				false_positive += 1;
 		else:
 			not_mapped = 0;
-	
+
 	return [true_positive, false_positive, not_mapped];
 
 def GetDistanceHistogramStats(sam_lines, distance_limits):
 	sorted_lines_by_distance = sorted(sam_lines, key=lambda sam_line: sam_line.min_distance);
-	
+
 	sorted_distance_limits = sorted(distance_limits);
 	ret_distance_counts = [0 for distance_limit in sorted_distance_limits];
 
 	current_distance_index = 0;
-	
+
 	total_correct = 0;
-	
+
 	i = 0;
 	while i < len(sorted_lines_by_distance):
 		sam_line = sorted_lines_by_distance[i];
-		
+
 		if (sam_line.IsMapped() and sam_line.is_duplicate == 0):
 			if (sam_line.is_correct_ref_and_orient == 1):
 				if (sam_line.min_distance < sorted_distance_limits[current_distance_index]):
@@ -794,12 +946,12 @@ def GetDistanceHistogramStats(sam_lines, distance_limits):
 						break;
 					#ret_distance_counts[current_distance_index] = 0 + ret_distance_counts[current_distance_index - 1];
 					continue;	# Do not increase i, because we want to check the current SAM line also.
-				
+
 		i += 1;
 
 	if (current_distance_index > 0):
 		ret_distance_counts[current_distance_index - 1] = total_correct;
-		
+
 	# If all the sam lines have been counted and the maximum observed distance is less than the maximum value of distance_limits parameter,
 	# fill the rest of the array with the same value (the last value that was counted), to make the graph flatline.
 	i = current_distance_index;
@@ -816,18 +968,18 @@ def GetDistanceHistogramStats(sam_lines, distance_limits):
 
 def GetDistanceHistogramStatsScaleDuplicates(sam_lines, distance_limits, scale_by_num_occurances=True):
 	sorted_lines_by_distance = sorted(sam_lines, key=lambda sam_line: sam_line.min_distance);
-	
+
 	sorted_distance_limits = sorted(distance_limits);
 	ret_distance_counts = [0 for distance_limit in sorted_distance_limits];
 
 	current_distance_index = 0;
-	
+
 	total_correct = 0.0;
-	
+
 	i = 0;
 	while i < len(sorted_lines_by_distance):
 		sam_line = sorted_lines_by_distance[i];
-		
+
 		if (sam_line.IsMapped()):
 			#if (sam_line.is_correct_ref_and_orient == 1):
 			if (sam_line.is_correct_ref_and_orient == 1 and sam_line.min_distance <= sorted_distance_limits[current_distance_index]):
@@ -837,7 +989,7 @@ def GetDistanceHistogramStatsScaleDuplicates(sam_lines, distance_limits, scale_b
 				else:
 					#print 'total_correct = ', total_correct;
 					total_correct += 1.0;
-				
+
 			else:
 				if (sam_line.min_distance > sorted_distance_limits[current_distance_index]):
 					ret_distance_counts[current_distance_index] = total_correct;
@@ -846,12 +998,12 @@ def GetDistanceHistogramStatsScaleDuplicates(sam_lines, distance_limits, scale_b
 						break;
 					#ret_distance_counts[current_distance_index] = 0 + ret_distance_counts[current_distance_index - 1];
 					continue;	# Do not increase i, because we want to check the current SAM line also.
-				
+
 		i += 1;
 
 	if (current_distance_index > 0):
 		ret_distance_counts[current_distance_index - 1] = total_correct;
-		
+
 	# If all the sam lines have been counted and the maximum observed distance is less than the maximum value of distance_limits parameter,
 	# fill the rest of the array with the same value (the last value that was counted), to make the graph flatline.
 	i = current_distance_index;
@@ -868,17 +1020,17 @@ def GetDistanceHistogramStatsScaleDuplicates(sam_lines, distance_limits, scale_b
 
 #def GetDistanceHistogramStats(sam_lines, distance_limits):
 	#sorted_lines_by_distance = sorted(sam_lines, key=lambda sam_line: sam_line.min_distance);
-	
+
 	#sorted_distance_limits = sorted(distance_limits);
 	#ret_distance_counts = [0 for distance_limit in sorted_distance_limits];
 
 	#current_distance_index = 0;
-	
+
 	##for sam_line in sorted_lines_by_distance:
 	#i = 0;
 	#while i < len(sorted_lines_by_distance):
 		#sam_line = sorted_lines_by_distance[i];
-		
+
 		#if (sam_line.IsMapped()):
 			#if (sam_line.is_correct_ref_and_orient == 1):
 				#if (sam_line.min_distance < sorted_distance_limits[current_distance_index]):
@@ -889,7 +1041,7 @@ def GetDistanceHistogramStatsScaleDuplicates(sam_lines, distance_limits, scale_b
 						#break;
 					#ret_distance_counts[current_distance_index] = 0 + ret_distance_counts[current_distance_index - 1];
 					#continue;	# Do not increase i, because we want to check the current SAM line also.
-				
+
 		#i += 1;
 
 	#i = current_distance_index;
@@ -899,21 +1051,21 @@ def GetDistanceHistogramStatsScaleDuplicates(sam_lines, distance_limits, scale_b
 
 	#min_sorted_distance_limit = sorted_distance_limits[0];
 	#sorted_distance_limits_shifted = [(distance_limit - min_sorted_distance_limit) for distance_limit in sorted_distance_limits];
-	
+
 	#return [sorted_distance_limits_shifted, ret_distance_counts];
 
 def GetMapqHistogramStats(sam_lines, mapq_limits, allowed_distance):
 	sorted_lines_by_mapq = sorted(sam_lines, reverse=True, key=lambda sam_line: sam_line.mapq);
 	sorted_mapq_limits = sorted(mapq_limits, reverse=True);
 	ret_mapq_counts = [0 for mapq_limit in sorted_mapq_limits];
-	
+
 	current_mapq = 0;
 	total_correct = 0;
 	#for sam_line in sorted_lines_by_mapq:
 	i = 0;
 	while i < len(sorted_lines_by_mapq):
 		sam_line = sorted_lines_by_mapq[i];
-		
+
 		if (sam_line.IsMapped() and sam_line.is_duplicate == 0):
 			if (sam_line.is_correct_ref_and_orient == 1):
 				if (sam_line.mapq >= sorted_mapq_limits[current_mapq]):
@@ -926,32 +1078,32 @@ def GetMapqHistogramStats(sam_lines, mapq_limits, allowed_distance):
 					current_mapq += 1;
 					if (current_mapq >= len(sorted_mapq_limits)):
 						break;
-					
+
 					continue;	# Do not increase i, because we want to check the current SAM line also.
 					#total_correct += 1;
 					#ret_mapq_counts[current_mapq] = 0 + ret_mapq_counts[current_mapq - 1];
 		i += 1;
-		
+
 	ret_mapq_counts[current_mapq] = total_correct;
-	
+
 	i = current_mapq;
 	while (i < len(sorted_mapq_limits)):
 		ret_mapq_counts[i] = ret_mapq_counts[current_mapq];
 		i += 1;
-	
+
 	return [allowed_distance, sorted_mapq_limits, ret_mapq_counts];
 
 def FindMultipleQnameEntries(sam_files):
 	#duplicate_list = [];
 	duplicate_hash = {};
-	
+
 	for sam_file in sam_files:
 		try:
 			fp_sam = open(sam_file, 'r');
 		except IOError:
 			print 'ERROR: Could not open file "%s" for reading!' % sam_file;
 			return [{}, 0];
-		
+
 		occurance_hash = {};
 		for line in fp_sam:
 			line = line.strip();
@@ -960,32 +1112,32 @@ def FindMultipleQnameEntries(sam_files):
 			if line[0] == '@':
 				continue;
 			sam_line = SAMLine(line);
-			
+
 			try:
 				occurance_hash[sam_line.qname] += 1;
 				duplicate_hash[sam_line.qname] = 1;
 			except:
 				occurance_hash[sam_line.qname] = 1;
-	
+
 		fp_sam.close();
-	
+
 	fp = open('test.multiple', 'w');
 	fp.write('\n'.join(duplicate_hash.keys()));
 	fp.close();
-	
+
 	return duplicate_hash;
 
 
 
 def CountMappedReads(sam_file):
 	fp = None;
-	
+
 	try:
 		fp = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!\n' % ('CountMappedReads', sam_file));
 		exit(1);
-	
+
 	num_alignments = 0;
 	num_mapped_alignments = 0;
 	sam_reads = {};
@@ -997,35 +1149,35 @@ def CountMappedReads(sam_file):
 	for line in fp:
 		if (len(line) == 0 or line[0] == '@'):
 			continue;
-		
+
 		sam_line = SAMLine(line.rstrip());
-		
+
 		# Count the number of occurances of each read in the SAM file (i.e. multiple mappings).
 		try:
 			sam_reads[sam_line.qname] += 1;
 			#print sam_line.qname;
 		except:
 			sam_reads[sam_line.qname] = 1;
-			
+
 		if (sam_line.IsMapped() == True):
 			# Count the occurances of mapped reads.
 			try:
 				sam_mapped_reads[sam_line.qname] += 1;
 			except:
 				sam_mapped_reads[sam_line.qname] = 1;
-			
+
 			try:
 				if (highest_scoring_alignment_for_read[sam_line.qname].chosen_quality < sam_line.chosen_quality):
 					highest_scoring_alignment_for_read[sam_line.qname] = sam_line;
 			except:
 				highest_scoring_alignment_for_read[sam_line.qname] = sam_line;
-			
+
 			num_mapped_alignments += 1;
-		
+
 		num_alignments += 1;
-	
+
 	fp.close();
-	
+
 	num_unique_reads = 0;
 	for value in sam_reads.values():
 		if (value == 1):
@@ -1034,7 +1186,7 @@ def CountMappedReads(sam_file):
 	for value in sam_mapped_reads.values():
 		if (value == 1):
 			num_unique_mapped_reads += 1;
-	
+
 	for best_read in highest_scoring_alignment_for_read.values():
 		total_num_bases += len(sam_line.seq);
 		num_mapped_bases += best_read.CalcNumMappedBases();

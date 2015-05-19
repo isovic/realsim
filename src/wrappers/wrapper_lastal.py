@@ -25,14 +25,14 @@ MAPPER_NAME = 'LAST';
 # some downstream analyses. This function extracts the reference and formats it to SAM format.
 def get_sam_header(reference_file):
 	[headers, seqs, quals] = fastqparser.read_fastq(reference_file);
-	
+
 	line = '';
-	
+
 	i = 0;
 	while i < len(headers):
 		line += '@SQ\tSN:%s\tLN:%d\n' % (headers[i], len(seqs[i]));
 		i += 1;
-	
+
 	return line;
 
 # Function 'run' should provide a standard interface for running a mapper. Given input parameters, it should run the
@@ -62,6 +62,9 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 	else:			# default
 		parameters = ' ';
 
+	# Running in overlap mode, trying to minimize clipping
+	parameters = parameters + ' -T 1'
+
 
 
 	if (output_suffix != ''):
@@ -69,7 +72,7 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 	else:
 		output_filename = MAPPER_NAME;
 
-	
+
 
 	reads_fasta = reads_file;
 	reads_basename = os.path.splitext(os.path.basename(reads_file))[0];
@@ -116,7 +119,7 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
 	subprocess.call(command, shell=True);
 	sys.stderr.write('\n\n');
-	
+
 	sys.stderr.write('[%s wrapper] %s wrapper script finished processing.\n' % (MAPPER_NAME, MAPPER_NAME));
 
 	return sam_file
