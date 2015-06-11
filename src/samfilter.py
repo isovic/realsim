@@ -11,31 +11,31 @@ import fastqparser;
 def filter_wrong_cigars(sam_file, out_filtered_sam_file):
 	fp_in = None;
 	fp_out = None;
-	
+
 	try:
 		fp_in = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!\n' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_filtered_sam_file, 'w');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for writing!\n' % (__name__, out_filtered_sam_file));
 		exit(1);
-	
+
 	num_accepted = 0;
 	num_rejected = 0;
-	
+
 	i = 0;
 	for line in fp_in:
 		sys.stderr.write('\rLine %d, num_accepted: %d, num_rejected: %d' % (i, num_accepted, num_rejected));
-		
+
 		if (len(line.strip()) == 0 or line[0] == '@'):
 			fp_out.write(line);
 			i += 1;
 			continue;
-		
+
 		sam_line = utility_sam.SAMLine(line.rstrip());
 		# if (sam_line.line_fields_ok == False):
 		# 	i += 1;
@@ -52,10 +52,10 @@ def filter_wrong_cigars(sam_file, out_filtered_sam_file):
 			# print '\tRejected: line: %d, qname: %s, len: %d, CIGAR len: %d' % (i, sam_line.qname, len(sam_line.seq), cigar_len);
 			num_rejected += 1;
 		i += 1;
-	
+
 	fp_in.close();
 	fp_out.close();
-	
+
 	sys.stderr.write('\n');
 	sys.stderr.write('Number of alignments with equal seq length and CIGAR length: %d (%.2f%%)\n' % (num_accepted, (float(num_accepted) / float(num_accepted + num_rejected)) * 100.0));
 	sys.stderr.write('Number of faulty alignments: %d (%.2f%%)\n' % (num_rejected, (float(num_rejected) / float(num_accepted + num_rejected)) * 100.0));
@@ -63,66 +63,66 @@ def filter_wrong_cigars(sam_file, out_filtered_sam_file):
 def filter_sam_by_mapq(sam_file, mapq_limit, out_filtered_sam_file):
 	fp_in = None;
 	fp_out = None;
-	
+
 	try:
 		fp_in = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_filtered_sam_file, 'w');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for writing!' % (__name__, out_filtered_sam_file));
 		exit(1);
-	
+
 	num_accepted = 0;
 	num_rejected = 0;
-	
+
 	for line in fp_in:
 		if (len(line.strip()) == 0 or line[0] == '@'):
 			fp_out.write(line);
 			continue;
-		
+
 		sam_line = utility_sam.SAMLine(line.rstrip());
-		
+
 		if (float(sam_line.mapq) >= float(mapq_limit)):
 		# if (float(sam_line.mapq) >= float(mapq_limit)):
 			fp_out.write(line);
 			num_accepted += 1;
 		else:
 			num_rejected += 1;
-	
+
 	fp_in.close();
 	fp_out.close();
-	
+
 	sys.stderr.write('num_accepted = %d (%.2f%%)\n' % (num_accepted, (float(num_accepted) / float(num_accepted + num_rejected)) * 100.0));
 	sys.stderr.write('num_rejected = %d (%.2f%%)\n' % (num_rejected, (float(num_rejected) / float(num_accepted + num_rejected)) * 100.0));
 
 def filter_sam_by_as(sam_file, as_limit, out_filtered_sam_file):
 	fp_in = None;
 	fp_out = None;
-	
+
 	try:
 		fp_in = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_filtered_sam_file, 'w');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for writing!' % (__name__, out_filtered_sam_file));
 		exit(1);
-	
+
 	num_accepted = 0;
 	num_rejected = 0;
-	
+
 	for line in fp_in:
 		if (len(line.strip()) == 0 or line[0] == '@'):
 			fp_out.write(line);
 			continue;
-		
+
 		sam_line = utility_sam.SAMLine(line.rstrip());
 
 		alignment_score = '';
@@ -130,43 +130,43 @@ def filter_sam_by_as(sam_file, as_limit, out_filtered_sam_file):
 			alignment_score = sam_line.optional['AS'];
 		except:
 			continue;
-		
+
 		if (float(alignment_score) >= float(as_limit)):
 			fp_out.write(line);
 			num_accepted += 1;
 		else:
 			num_rejected += 1;
-	
+
 	fp_in.close();
 	fp_out.close();
-	
+
 	sys.stderr.write('num_accepted = %d (%.2f%%)\n' % (num_accepted, (float(num_accepted) / float(num_accepted + num_rejected)) * 100.0));
 	sys.stderr.write('num_rejected = %d (%.2f%%)\n' % (num_rejected, (float(num_rejected) / float(num_accepted + num_rejected)) * 100.0));
 
 def filter_sam_by_length(sam_file, threshold, out_filtered_sam_file):
 	fp_in = None;
 	fp_out = None;
-	
+
 	try:
 		fp_in = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_filtered_sam_file, 'w');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for writing!' % (__name__, out_filtered_sam_file));
 		exit(1);
-	
+
 	num_accepted = 0;
 	num_rejected = 0;
-	
+
 	for line in fp_in:
 		if (len(line.strip()) == 0 or line[0] == '@'):
 			fp_out.write(line);
 			continue;
-		
+
 		sam_line = utility_sam.SAMLine(line.rstrip());
 
 		if ((len(sam_line.seq) + sam_line.clip_count_front + sam_line.clip_count_back) >= threshold):
@@ -174,33 +174,33 @@ def filter_sam_by_length(sam_file, threshold, out_filtered_sam_file):
 			num_accepted += 1;
 		else:
 			num_rejected += 1;
-	
+
 	fp_in.close();
 	fp_out.close();
-	
+
 	sys.stderr.write('num_accepted = %d (%.2f%%)\n' % (num_accepted, (float(num_accepted) / float(num_accepted + num_rejected)) * 100.0));
 	sys.stderr.write('num_rejected = %d (%.2f%%)\n' % (num_rejected, (float(num_rejected) / float(num_accepted + num_rejected)) * 100.0));
 
 def filter_sam_by_evalue(sam_file, threshold, out_filtered_sam_file):
 	fp_in = None;
 	fp_out = None;
-	
+
 	try:
 		fp_in = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_filtered_sam_file, 'w');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for writing!' % (__name__, out_filtered_sam_file));
 		exit(1);
-	
+
 	num_accepted = 0;
 	num_rejected = 0;
 	num_unmapped = 0;
-	
+
 	i = 0;
 	for line in fp_in:
 		if (len(line.strip()) == 0 or line[0] == '@'):
@@ -209,7 +209,7 @@ def filter_sam_by_evalue(sam_file, threshold, out_filtered_sam_file):
 
 		i += 1;
 		sys.stderr.write('\rLine %d, num_accepted: %d, num_rejected: %d' % (i, num_accepted, num_rejected));
-		
+
 		sam_line = utility_sam.SAMLine(line.rstrip());
 
 		# if ((len(sam_line.seq) + sam_line.clip_count_front + sam_line.clip_count_back) >= threshold):
@@ -221,10 +221,10 @@ def filter_sam_by_evalue(sam_file, threshold, out_filtered_sam_file):
 			num_accepted += 1;
 		else:
 			num_rejected += 1;
-	
+
 	fp_in.close();
 	fp_out.close();
-	
+
 	sys.stderr.write('\n');
 	sys.stderr.write('Done!\n');
 	sys.stderr.write('num_accepted = %d (%.2f%%)\n' % (num_accepted, (float(num_accepted) / float(num_accepted + num_rejected)) * 100.0));
@@ -255,21 +255,21 @@ def filter_qnames(sam_file, pattern_file, sam_parameter_to_compare, out_filtered
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_filtered_sam_file, 'w');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for writing!' % (__name__, out_filtered_sam_file));
 		exit(1);
-	
+
 	num_accepted = 0;
 	num_rejected = 0;
-	
+
 	for line in fp_in:
 		if (len(line.strip()) == 0 or line[0] == '@'):
 			fp_out.write(line);
 			continue;
-		
+
 		sam_line = utility_sam.SAMLine(line.rstrip());
 
 		is_current_accepted = False;
@@ -288,10 +288,10 @@ def filter_qnames(sam_file, pattern_file, sam_parameter_to_compare, out_filtered
 				# print sam_line.rname;
 		if (is_current_accepted == False):
 			num_rejected += 1;
-	
+
 	fp_in.close();
 	fp_out.close();
-	
+
 	sys.stderr.write('num_accepted = %d (%.2f%%)\n' % (num_accepted, (float(num_accepted) / float(num_accepted + num_rejected)) * 100.0));
 	sys.stderr.write('num_rejected = %d (%.2f%%)\n' % (num_rejected, (float(num_rejected) / float(num_accepted + num_rejected)) * 100.0));
 
@@ -305,7 +305,7 @@ def filter_qnames(sam_file, pattern_file, sam_parameter_to_compare, out_filtered
 # 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for writing!\n' % (__name__, out_filtered_sam_file));
 # 		exit(1);
 
-	
+
 # 	sorted_lines_by_name = sorted(sam_lines, key=lambda sam_line: (sam_line.qname, (-sam_line.chosen_quality)));
 
 # 	# Filter unique SAM lines, where uniqueness is defined by the qname parameter.
@@ -322,12 +322,12 @@ def filter_qnames(sam_file, pattern_file, sam_parameter_to_compare, out_filtered
 # 	count = 0;
 # 	while i < len(sorted_lines_by_name):
 # 		sam_line = sorted_lines_by_name[i];
-		
+
 # 		if (sam_line.IsMapped() == False):
 # 			num_unmapped_alignments += 1;
 # 		else:
 # 			is_read_mapped = 1;
-		
+
 # 		if (previous_line == None or sam_line.qname != previous_line.qname):
 # 			if (count == 1):
 # 				num_unambiguous_reads += 1;
@@ -386,27 +386,27 @@ def filter_uniqe_best(sam_file, out_filtered_sam_file):
 def filter_mapped(sam_file, mapped, out_filtered_sam_file):
 	fp_in = None;
 	fp_out = None;
-	
+
 	try:
 		fp_in = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_filtered_sam_file, 'w');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for writing!' % (__name__, out_filtered_sam_file));
 		exit(1);
-	
+
 	num_accepted = 0;
 	num_rejected = 0;
-	
+
 	for line in fp_in:
 		if (len(line.strip()) == 0 or line[0] == '@'):
 			fp_out.write(line);
 			continue;
-		
+
 		sam_line = utility_sam.SAMLine(line.rstrip());
 
 		if ((mapped == 0 and sam_line.IsMapped() == False) or (mapped != 0 and sam_line.IsMapped() == True)):
@@ -414,23 +414,28 @@ def filter_mapped(sam_file, mapped, out_filtered_sam_file):
 			num_accepted += 1;
 		else:
 			num_rejected += 1;
-	
+
 	fp_in.close();
 	fp_out.close();
-	
+
 	sys.stderr.write('num_accepted = %d (%.2f%%)\n' % (num_accepted, (float(num_accepted) / float(num_accepted + num_rejected)) * 100.0));
 	sys.stderr.write('num_rejected = %d (%.2f%%)\n' % (num_rejected, (float(num_rejected) / float(num_accepted + num_rejected)) * 100.0));
 
+
+# Add quality values to a SAM file from original reads
+# BWA-MEM keeps original quality values in the SAM file, but LAST doesn't
+# There is a problem with illumina reads, because both BWA and LAST remove pair end read identifier
+# so corresponding quality values are harder to find afterwards
 def add_quality_values(sam_file, fastq_file, out_filtered_sam_file):
 	fp_in = None;
 	fp_out = None;
-	
+
 	try:
 		fp_in = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_filtered_sam_file, 'w');
 	except IOError:
@@ -447,20 +452,33 @@ def add_quality_values(sam_file, fastq_file, out_filtered_sam_file):
 
 	num_accepted = 0;
 	num_rejected = 0;
-	
+
 	for line in fp_in:
 		if (len(line.strip()) == 0 or line[0] == '@'):
 			fp_out.write(line);
 			continue;
-		
+
 		sam_line = utility_sam.SAMLine(line.rstrip());
 
 		if (sam_line.qual != '*' and sam_line.qual != ''):
-			fp_out.write(line);
-			continue;
+			fp_out.write(line)
+			continue
 
-		read_id = header_hash[sam_line.qname];
-		read_qual = quals[read_id];
+		# Taking into account pair end reads.
+		# If a qname doesn't exist in the original reads file, adding /1 and /2 at the end
+		# And using either quals if the corresponding read exists
+		read_id = ''
+		if sam_line.qname in header_hash.iterkeys():
+			read_id = header_hash[sam_line.qname]
+		elif (sam_line.qname + r'/1') in header_hash.iterkeys():
+			read_id = header_hash[sam_line.qname + r'/1']
+		elif (sam_line.qname + r'/2') in header_hash.iterkeys():
+			read_id = header_hash[sam_line.qname + r'/2']
+			# '/1' should be found, both enteries should exist or neither
+		else:
+			sys.stderr.write('ERROR: Reads file and SAM file do not match! Exiting.\n');
+			exit(1);
+		read_qual = quals[read_id]
 		if (read_qual == None or len(read_qual) == 0):
 			sys.stderr.write('ERROR: Reads file given is not FASTQ! Exiting.\n');
 			exit(1);
@@ -489,13 +507,13 @@ def add_quality_values(sam_file, fastq_file, out_filtered_sam_file):
 def add_dummy_quality_values(phred_qv, sam_file, out_filtered_sam_file):
 	fp_in = None;
 	fp_out = None;
-	
+
 	try:
 		fp_in = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_filtered_sam_file, 'w');
 	except IOError:
@@ -506,7 +524,7 @@ def add_dummy_quality_values(phred_qv, sam_file, out_filtered_sam_file):
 		if (len(line.strip()) == 0 or line[0] == '@'):
 			fp_out.write(line);
 			continue;
-		
+
 		split_line = line.strip().split('\t');
 		seq = split_line[9];
 		split_line[10] = phred_qv * len(seq);
@@ -519,24 +537,24 @@ def add_dummy_quality_values(phred_qv, sam_file, out_filtered_sam_file):
 def add_dummy_quality_values_nanopore(phred_qv_1d, phred_qv_2d, sam_file, out_filtered_sam_file):
 	fp_in = None;
 	fp_out = None;
-	
+
 	try:
 		fp_in = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_filtered_sam_file, 'w');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for writing!' % (__name__, out_filtered_sam_file));
 		exit(1);
-	
+
 	for line in fp_in:
 		if (len(line.strip()) == 0 or line[0] == '@'):
 			fp_out.write(line);
 			continue;
-		
+
 		split_line = line.strip().split('\t');
 		qname = split_line[0].lower();
 		seq = split_line[9];
@@ -564,22 +582,22 @@ def extract_region_full(region, sam_file, out_filtered_sam_file):
 
 	fp_in = None;
 	fp_out = None;
-	
+
 	try:
 		fp_in = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_filtered_sam_file, 'w');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for writing!' % (__name__, out_filtered_sam_file));
 		exit(1);
-	
+
 	num_accepted = 0;
 	num_rejected = 0;
-	
+
 	i = 0;
 	for line in fp_in:
 		i += 1;
@@ -588,7 +606,7 @@ def extract_region_full(region, sam_file, out_filtered_sam_file):
 		if (len(line.strip()) == 0 or line[0] == '@'):
 			fp_out.write(line);
 			continue;
-		
+
 		sam_line = utility_sam.SAMLine(line.rstrip());
 
 		# if ((mapped == 0 and sam_line.IsMapped() == False) or (mapped != 0 and sam_line.IsMapped() == True)):
@@ -597,10 +615,10 @@ def extract_region_full(region, sam_file, out_filtered_sam_file):
 			num_accepted += 1;
 		else:
 			num_rejected += 1;
-	
+
 	fp_in.close();
 	fp_out.close();
-	
+
 	sys.stderr.write('num_accepted = %d (%.2f%%)\n' % (num_accepted, (float(num_accepted) / float(num_accepted + num_rejected)) * 100.0));
 	sys.stderr.write('num_rejected = %d (%.2f%%)\n' % (num_rejected, (float(num_rejected) / float(num_accepted + num_rejected)) * 100.0));
 
@@ -616,22 +634,22 @@ def extract_region_partial(region, sam_file, out_filtered_sam_file):
 
 	fp_in = None;
 	fp_out = None;
-	
+
 	try:
 		fp_in = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_filtered_sam_file, 'w');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for writing!' % (__name__, out_filtered_sam_file));
 		exit(1);
-	
+
 	num_accepted = 0;
 	num_rejected = 0;
-	
+
 	i = 0;
 	for line in fp_in:
 		i += 1;
@@ -640,7 +658,7 @@ def extract_region_partial(region, sam_file, out_filtered_sam_file):
 		if (len(line.strip()) == 0 or line[0] == '@'):
 			fp_out.write(line);
 			continue;
-		
+
 		sam_line = utility_sam.SAMLine(line.rstrip());
 
 		# if ((mapped == 0 and sam_line.IsMapped() == False) or (mapped != 0 and sam_line.IsMapped() == True)):
@@ -661,10 +679,10 @@ def extract_region_partial(region, sam_file, out_filtered_sam_file):
 		# 	num_accepted += 1;
 		# else:
 		# 	num_rejected += 1;
-	
+
 	fp_in.close();
 	fp_out.close();
-	
+
 	sys.stderr.write('\n');
 	sys.stderr.write('num_accepted = %d (%.2f%%)\n' % (num_accepted, (float(num_accepted) / float(num_accepted + num_rejected)) * 100.0));
 	sys.stderr.write('num_rejected = %d (%.2f%%)\n' % (num_rejected, (float(num_rejected) / float(num_accepted + num_rejected)) * 100.0));
@@ -674,22 +692,22 @@ def extract_region_partial(region, sam_file, out_filtered_sam_file):
 def filter_1d_2d(is_1d_or_2d, sam_file, out_filtered_sam_file):
 	fp_in = None;
 	fp_out = None;
-	
+
 	try:
 		fp_in = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_filtered_sam_file, 'w');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for writing!' % (__name__, out_filtered_sam_file));
 		exit(1);
-	
+
 	num_accepted = 0;
 	num_rejected = 0;
-	
+
 	i = 0;
 	for line in fp_in:
 		i += 1;
@@ -697,7 +715,7 @@ def filter_1d_2d(is_1d_or_2d, sam_file, out_filtered_sam_file):
 			fp_out.write(line);
 			continue;
 		sys.stderr.write('\rLine %d, num_accepted: %d, num_rejected: %d' % (i, num_accepted, num_rejected));
-		
+
 		# sam_line = utility_sam.SAMLine(line.rstrip());
 		split_line = line.rstrip().split('\t');
 		qname = split_line[0].lower();
@@ -708,10 +726,10 @@ def filter_1d_2d(is_1d_or_2d, sam_file, out_filtered_sam_file):
 			num_accepted += 1;
 		else:
 			num_rejected += 1;
-	
+
 	fp_in.close();
 	fp_out.close();
-	
+
 	sys.stderr.write('num_accepted = %d (%.2f%%)\n' % (num_accepted, (float(num_accepted) / float(num_accepted + num_rejected)) * 100.0));
 	sys.stderr.write('num_rejected = %d (%.2f%%)\n' % (num_rejected, (float(num_rejected) / float(num_accepted + num_rejected)) * 100.0));
 
@@ -721,13 +739,13 @@ def filter_1d_2d(is_1d_or_2d, sam_file, out_filtered_sam_file):
 def extract_features_csv(sam_file, out_csv_file):
 	fp_in = None;
 	fp_out = None;
-	
+
 	try:
 		fp_in = open(sam_file, 'r');
 	except IOError:
 		sys.stderr.write('[%s] ERROR: Could not open file "%s" for reading!' % (__name__, sam_file));
 		exit(1);
-	
+
 	try:
 		fp_out = open(out_csv_file, 'w');
 	except IOError:
@@ -740,7 +758,7 @@ def extract_features_csv(sam_file, out_csv_file):
 	for line in fp_in:
 		if (len(line.strip()) == 0 or line[0] == '@'):
 			continue;
-		
+
 		sam_line = utility_sam.SAMLine(line.rstrip());
 
 		if (sam_line.IsMapped() == False):

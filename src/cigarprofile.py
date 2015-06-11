@@ -161,7 +161,7 @@ class CIGARProfile:
                 sys.stderr.write('\nInvalid CIGAR operation for generating random reads: %s\n' % optype)
                 exit(1)
 
-        # Return generated read and coresponding quals string
+        # Return generated read and corresponding quals string
         return read, cline.quals
 
 
@@ -323,8 +323,7 @@ def loadCProfile(filepath):
             mutCntDict[elements[1]] = int(elements[2])
             mutCntDict[elements[3]] = int(elements[4])
             mutCntDict[elements[5]] = int(elements[6])
-            elements[0]
-            cprofile.mutCntTable[base] = mutCntDict
+            cprofile.mutCntTable[elements[0]] = mutCntDict
 
         # Skipping line with headings
         line = pfile.readline()

@@ -5,17 +5,20 @@ SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__));
 
 import fnmatch
 
-WRAPPERS_PATH = 'wrappers';
-WRAPPERS_PATH_ROOT_ABS = SCRIPT_PATH + '/../src/' + WRAPPERS_PATH;
+WRAPPERS_PATH = 'wrappers'
+WRAPPERS_PATH_ROOT_ABS = os.path.join(SCRIPT_PATH, '..', WRAPPERS_PATH)
 
-TOOLS_ROOT = 'tools';
-TOOLS_ROOT_ABS = SCRIPT_PATH + '/../' + TOOLS_ROOT;
+TOOLS_ROOT = 'tools'
+TOOLS_ROOT_ABS = os.path.join(SCRIPT_PATH, '..', TOOLS_ROOT)
 
-ALIGNERS_PATH = 'tools';
-ALIGNERS_PATH_ROOT_ABS = SCRIPT_PATH + '/../' + ALIGNERS_PATH;
+INTERMEDIATE_PATH = 'intermediate'
+INTERMEDIATE_PATH_ROOT_ABS = os.path.join(SCRIPT_PATH, '..', INTERMEDIATE_PATH)
 
+ALIGNERS_PATH = 'tools'
+ALIGNERS_PATH_ROOT_ABS = os.path.join(SCRIPT_PATH, '..', ALIGNERS_PATH)
 
-
+PROFILES_PATH = 'profiles'
+PROFILES_PATH_ABS = os.path.join(SCRIPT_PATH, '..', PROFILES_PATH)
 
 
 

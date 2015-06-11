@@ -16,6 +16,14 @@ def create_folders():
 		sys.stderr.write('Creating folder "%s".\n' % basicdefines.TOOLS_ROOT_ABS);
 		os.makedirs(basicdefines.TOOLS_ROOT_ABS);
 
+	if not os.path.exists(basicdefines.INTERMEDIATE_PATH_ROOT_ABS):
+		sys.stderr.write('Creating folder "%s".\n' % basicdefines.INTERMEDIATE_PATH_ROOT_ABS);
+		os.makedirs(basicdefines.INTERMEDIATE_PATH_ROOT_ABS);
+
+	if not os.path.exists(basicdefines.PROFILES_PATH_ABS):
+		sys.stderr.write('Creating folder "%s".\n' % basicdefines.PROFILES_PATH_ABS);
+		os.makedirs(basicdefines.PROFILES_PATH_ABS);
+
 	sys.stderr.write('\n');
 
 def download_aligners():
