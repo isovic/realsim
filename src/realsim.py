@@ -465,7 +465,7 @@ def list_profiles():
 
 
 
-def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = None, coverage = None, header = None):
+def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = None, coverage = None, header = None, fastq = True):
 
 	profile_path = get_cprofile_path(cprofile)
 
@@ -500,21 +500,26 @@ def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = Non
 		# numreads = len(reference)*coverage / avg_read_length
 		numreads = len(reference_seq) * coverage / avglength
 
+	if fastq:
+		firstchar = '@'
+	else:
+		firstchar = '>'
+
 	# Writing simulated reads
 	sys.stderr.write('Simulating reads...\n')
 	with open(readspath, 'w') as readsfile:
 		for i in xrange(numreads):
 			qname = '%s_simulated_read_%d' % (header, i)
 			read, quals = cprofile.generateRandomRead(reference_seq)
-			readsfile.write('@' + qname + '\n')
+			readsfile.write(firstchar + qname + '\n')
 			readsfile.write(read + '\n')
-			# If quals exist in the profile, write them to the file as well
-			if quals is not None:
+			# If quals exist in the profile and files needs to be fastq, write them to the file as well
+			if quals is not None and fastq:
 				readsfile.write('+' + qname + '\n')
 				readsfile.write(quals + '\n')
 
 
-def spike_with_cprofile(cprofile, reference_path, reads_file,  output_file, numreads = None, coverage = None, header = None):
+def spike_with_cprofile(cprofile, reference_path, reads_file,  output_file, numreads = None, coverage = None, header = None, fastq = True):
 
 	profile_path = get_cprofile_path(cprofile)
 
@@ -523,7 +528,7 @@ def spike_with_cprofile(cprofile, reference_path, reads_file,  output_file, numr
 	temp_filename = 'TEMP_' + uuid_string + os.path.splitext(output_file)[1]
 	temp_output_file = os.path.join(basicdefines.INTERMEDIATE_PATH_ROOT_ABS, temp_filename)
 
-	simulate_with_cprofile(profile_path, reference_path, temp_output_file, numreads, coverage, header)
+	simulate_with_cprofile(profile_path, reference_path, temp_output_file, numreads, coverage, header, fastq)
 	combine_files(temp_output_file, reads_file, output_file)
 
 
@@ -792,12 +797,20 @@ if __name__ == '__main__':
 			sys.stderr.write('\t\t-h header\n')
 			sys.stderr.write('\t\t-n number_of_reads\n')
 			sys.stderr.write('\t\t-c coverage\n')
+			sys.stderr.write('\t\t-t type (fasta or fatsq, fastq is default)\n')
 			sys.stderr.write('\n')
 			exit(1)
 
 		profile_path = sys.argv[2]
 		reference_path = sys.argv[3]
 		output_file = sys.argv[4]
+
+		# Look at extension of the output file to decide whether to generate reads in fasta or fastq format
+		# Format can also be specified by parameter -t. Parameter is stronger then file extension.
+		# If nothing is specified, fastq reads are generated
+		fastq = True
+		if output_file.endswith('.fa') or output_file.endswith('.fasta'):
+			fastq = False
 
 		# parsing options
 		header = numreads = coverage = None
@@ -816,6 +829,15 @@ if __name__ == '__main__':
 				except:
 					sys.stderr.write('Wrong value for parameter "coverage"! Value needs to be an int.\n\n')
 					exit()
+			elif sys.argv[i] == '-t':
+				ftype = sys.argv[i+1].lower()
+				if ftype == 'fastq':
+					fastq = True
+				elif ftype == 'fasta':
+					fastq = False
+				else:
+					sys.stderr.write('Parameter -t goes with \'fasta\' or \'fastq\'.\n\n')
+					exit()
 			else:
 				sys.stderr.write('Invalid parameter!.\n\n')
 				exit()
@@ -824,7 +846,7 @@ if __name__ == '__main__':
 			sys.stderr.write('Either "coverage" or "number of reads" parameter must be specified.\n\n')
 			exit()
 
-		simulate_with_cprofile(profile_path, reference_path, output_file, numreads, coverage, header)
+		simulate_with_cprofile(profile_path, reference_path, output_file, numreads, coverage, header, fastq)
 
 	elif (mode == 'spike_with_CProfile'):
 		if (len(sys.argv) != 6):
@@ -838,6 +860,7 @@ if __name__ == '__main__':
 			sys.stderr.write('\t\t-h header\n')
 			sys.stderr.write('\t\t-n number_of_reads\n')
 			sys.stderr.write('\t\t-c coverage\n')
+			sys.stderr.write('\t\t-t type (fasta or fatsq, fastq is default)\n')
 			sys.stderr.write('\n')
 			exit(1)
 
@@ -845,6 +868,13 @@ if __name__ == '__main__':
 		reference_path = sys.argv[3]
 		reads_file = sys.argv[4]
 		output_file = sys.argv[5]
+
+		# Look at extension of the output file to decide whether to generate reads in fasta or fastq format
+		# Format can also be specified by parameter -t. Parameter is stronger then file extension.
+		# If nothing is specified, fastq reads are generated
+		fastq = True
+		if output_file.endswith('.fa') or output_file.endswith('.fasta'):
+			fastq = False
 
 		# parsing options
 		header = numreads = coverage = None
@@ -863,6 +893,15 @@ if __name__ == '__main__':
 				except:
 					sys.stderr.write('Wrong value for parameter "coverage"! Value needs to be an int.\n\n')
 					exit()
+			elif sys.argv[i] == '-t':
+				ftype = sys.argv[i+1].lower()
+				if ftype == 'fastq':
+					fastq = True
+				elif ftype == 'fasta':
+					fastq = False
+				else:
+					sys.stderr.write('Parameter -t goes with \'fasta\' or \'fastq\'.\n\n')
+					exit()
 			else:
 				sys.stderr.write('Invalid parameter!.\n\n')
 				exit()
@@ -871,7 +910,7 @@ if __name__ == '__main__':
 			sys.stderr.write('Either "coverage" or "number of reads" parameter must be specified.\n\n')
 			exit()
 
-		spike_with_cprofile(profile_path, reference_path, reads_file, output_file, numreads, coverage, header)
+		spike_with_cprofile(profile_path, reference_path, reads_file, output_file, numreads, coverage, header, fastq)
 
 	elif (mode == 'combine_files'):
 		if (len(sys.argv) != 5):
