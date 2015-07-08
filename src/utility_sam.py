@@ -64,6 +64,34 @@ class SAMLine:
 		# For sanity checking - this is True if the SAM line contains all fields. It is false i.e. if file writing was interrupted before line was finished.
 		self.line_fields_ok = False;
 
+	def tabDelimited(self):
+		qname = self.qname
+		if qname == '':
+			qname = '*'
+		flag = str(self.flag)
+		rname = self.rname
+		if rname == '':
+			rname = '*'
+		pos = str(self.pos)
+		mapq = str(self.mapq)
+		cigar = self.cigar
+		if cigar == '':
+			cigar = '*'
+		mrnm = self.mrnm
+		if mrnm == '':
+			mrnm = '*'
+		mpos = str(self.mpos)
+		isize = str(self.isize)
+		seq = self.seq
+		if seq == '':
+			seq = '*'
+		qual = self.qual
+		if qual == '':
+			qual = '*'
+
+		line = '\t'.join((qname, flag, rname, pos, mapq, cigar, mrnm, mpos, isize, seq, qual))
+		return line + '\n'
+
 	def VerboseFormatLine(self):
 		#line = 'qname = %s\tflag = %d\trname = %s\tpos = %d\tmapq = %d\tis_header_deformed = %d\tis_correct_ref_and_orient = %d\tis_duplicate = %d\tis_best_of_duplicates = %d\tactual_ref_pos = %d\tmapped_pos_with_shift = %d\tmin_distance = %d\tsecondary = %s\tactual_ref_reverse = %d\treverse = %d\tpaired = %s\t' % (
 			#self.qname, self.flag, self.rname, self.pos, self. mapq, self.is_header_deformed, int(self.is_correct_ref_and_orient), int(self.is_duplicate), int(self.is_best_of_duplicates), self.actual_ref_pos, self.mapped_pos_with_shift, self.min_distance, str(self.IsSecondary()), self.actual_ref_reverse, self.IsReverse(), self.IsPaired());
@@ -305,11 +333,15 @@ class SAMLine:
 		for op in operations:
 			opsize = op[0]
 			optype = op[1]
-			if optype == 'M':
+			if optype in 'M=':
 				mcigar = getExtendedCIGAR(reference[refpos:refpos+opsize], self.seq[seqpos:seqpos+opsize])
 				extcigar += mcigar
 				refpos += opsize
 				seqpos += opsize
+			elif optype == 'X':
+				refpos += opsize
+				seqpos += opsize
+				extcigar += '%s%s' % (opsize, optype)
 			elif optype in 'IS':
 				seqpos += opsize
 				extcigar += '%s%s' % (opsize, optype)
@@ -348,6 +380,9 @@ class SAMLine:
 		GCcontent = 0.0
 		GCcount = 0
 		length = self.CalcReferenceLengthFromCigar()
+		if length == 0:
+			import pdb
+			pdb.set_trace()
 		extcigar = ''
 		operations = self.SplitCigar()
 		refpos = self.pos-1	# start of alignment within referece, clipped bases are skipped
@@ -365,11 +400,15 @@ class SAMLine:
 		for op in operations:
 			opsize = op[0]
 			optype = op[1]
-			if optype == 'M':
+			if optype in 'M=':
 				mcigar = getExtendedCIGAR(reference[refpos:refpos+opsize], self.seq[seqpos:seqpos+opsize])
 				extcigar += mcigar
 				refpos += opsize
 				seqpos += opsize
+			elif optype == 'X':
+				refpos += opsize
+				seqpos += opsize
+				extcigar += '%s%s' % (opsize, optype)
 			elif optype in 'IS':
 				seqpos += opsize
 				extcigar += '%s%s' % (opsize, optype)

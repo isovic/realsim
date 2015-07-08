@@ -12,10 +12,11 @@ import multiprocessing;
 import basicdefines;
 import fastqparser;
 
-ALIGNER_URL = 'http://last.cbrc.jp/last-534.zip';
+# For adding quality values to LAST SAM file
+from samfilter import add_quality_values
 
-# ALIGNER_PATH = SCRIPT_PATH + '/../aligners/last-534/src';
-ALIGNER_PATH = basicdefines.ALIGNERS_PATH_ROOT_ABS + '/last-534/src';
+ALIGNER_URL = 'http://last.cbrc.jp/last-534.zip';
+ALIGNER_PATH = os.path.join(basicdefines.ALIGNERS_PATH_ROOT_ABS, 'last-534/src')
 BIN = 'lastal';
 MAPPER_NAME = 'LAST';
 
@@ -30,7 +31,7 @@ def get_sam_header(reference_file):
 
 	i = 0;
 	while i < len(headers):
-		line += '@SQ\tSN:%s\tLN:%d\n' % (headers[i], len(seqs[i]));
+		line += '@SQ\tSN:%s\tLN:%d\n' % (headers[i].split()[0], len(seqs[i]));
 		i += 1;
 
 	return line;
@@ -45,26 +46,31 @@ def get_sam_header(reference_file):
 #	output_suffix		A custom suffix that can be added to the output filename.
 def run(reads_file, reference_file, machine_name, output_path, output_suffix=''):
 	parameters = '';
-	num_threads = multiprocessing.cpu_count();
+	num_threads = multiprocessing.cpu_count() / 2;
 
 	if ((machine_name.lower() == 'illumina') or (machine_name.lower() == 'roche')):
-		parameters = ' ';
+		parameters = '-v -T 1';
 
 	elif ((machine_name.lower() == 'pacbio')):
-		parameters = '-q 1 -r 1 -a 1 -b 1';
+		parameters = '-v -q 1 -r 1 -a 1 -b 1 -T 1';
 
 	elif ((machine_name.lower() == 'nanopore')):
-		parameters = '-q 1 -r 1 -a 1 -b 1';
+		parameters = '-v -q 1 -r 1 -a 1 -b 1 -T 1';
+
+	elif ((machine_name.lower() == 'overlap')):
+		parameters = '-q 1 -r 1 -a 1 -b 1 -T 1';
+
+	elif ((machine_name.lower() == 'longindel')):
+		parameters = '-q 1 -r 1 -a 1 -b 1 -T 1';
+
+	elif ((machine_name.lower() == 'longindel2')):
+		parameters = '-q 1 -r 1 -a 1 -b 1 -T 1 -x 1200';
 
 	elif ((machine_name.lower() == 'debug')):
-		parameters = ' ';
+		parameters = '-v -T 1';
 
 	else:			# default
-		parameters = ' ';
-
-	# Running in overlap mode, trying to minimize clipping
-	parameters = parameters + ' -T 1'
-
+		parameters = '-v ';
 
 
 	if (output_suffix != ''):
@@ -73,54 +79,68 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 		output_filename = MAPPER_NAME;
 
 
-
-	reads_fasta = reads_file;
-	reads_basename = os.path.splitext(os.path.basename(reads_file))[0];
-	maf_file = '%s/%s.maf' % (output_path, output_filename);
-	sam_file = '%s/%s.sam' % (output_path, output_filename);
-	memtime_file = '%s/%s.memtime' % (output_path, output_filename);
-	memtime_file_index = '%s/%s-index.memtime' % (output_path, output_filename);
-	memtime_file_maftosam = '%s/%s-maftosam.memtime' % (output_path, output_filename);
-	reference_db_file = reference_file + '.db';
+	reads_fasta = reads_file
+	reads_basename = os.path.splitext(os.path.basename(reads_file))[0]
+	maf_file = os.path.join(output_path, output_filename + '.maf')
+	tmpsam_file = os.path.join(output_path, 'tmplast.sam')						# LASTAL SAM file without quals
+	sam_file = os.path.join(output_path, output_filename + '.sam')				# LASTAL SAM file with quals
+	memtime_file = '%s/%s.memtime' % (output_path, output_filename)
+	memtime_file_index = '%s/%s-index.memtime' % (output_path, output_filename)
+	memtime_file_maftosam = '%s/%s-maftosam.memtime' % (output_path, output_filename)
+	reference_db_file = reference_file + '.db'
 
 	# Check if the given input file is a FASTA or FASTQ, and convert to FASTA if necessary.
 	if (reads_file[-1] == 'q'):
-		sys.stderr.write('[%s wrapper] Converting FASTQ to FASTA...\n' % (MAPPER_NAME));
-		reads_fasta = reads_file[0:-1] + 'a';
-		fastqparser.convert_to_fasta(reads_file, reads_fasta);
-		sys.stderr.write('\n');
+		sys.stderr.write('[%s wrapper] Converting FASTQ to FASTA...\n' % (MAPPER_NAME))
+		reads_fasta = reads_file[0:-1] + 'a'
+		fastqparser.convert_to_fasta(reads_file, reads_fasta)
+		sys.stderr.write('\n')
 
-	if not os.path.exists(reference_db_file + '.suf'):
-		# Run the indexing process, and measure execution time and memory.
-		sys.stderr.write('[%s wrapper] Generating index...\n' % (MAPPER_NAME));
-		# command = '%s %s/lastdb %s %s' % (basicdefines.measure_command(memtime_file_index), ALIGNER_PATH, reference_db_file, reference_file);
-		command = '%s/lastdb %s %s' % (ALIGNER_PATH, reference_db_file, reference_file);
-		sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
-		subprocess.call(command, shell=True);
-		sys.stderr.write('\n\n');
+	# Run the indexing process, and measure execution time and memory.
+	if (True or (not os.path.exists(reference_db_file + '.suf'))):
+		sys.stderr.write('[%s wrapper] Generating index...\n' % (MAPPER_NAME))
+
+		# command = '%s %s/lastdb %s %s' % (basicdefines.measure_command(memtime_file_index), ALIGNER_PATH, reference_db_file, reference_file)
+		# ATM not doing measurements
+		command = '%s/lastdb %s %s' % (ALIGNER_PATH, reference_db_file, reference_file)
+
+		sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command))
+		subprocess.call(command, shell=True)
+		sys.stderr.write('\n\n')
 	else:
-		sys.stderr.write('[%s wrapper] Reference index already exists. Continuing.\n' % (MAPPER_NAME));
+		sys.stderr.write('[%s wrapper] Reference DB already exists. Continuing.\n' % (MAPPER_NAME))
+		sys.stderr.flush()
 
 	# Run the alignment process, and measure execution time and memory.
-	sys.stderr.write('[%s wrapper] Running %s...\n' % (MAPPER_NAME, MAPPER_NAME));
-	# command = '%s %s/%s %s %s %s > %s' % (basicdefines.measure_command(memtime_file), ALIGNER_PATH, BIN, parameters, reference_db_file, reads_fasta, maf_file);
-	command = '%s/%s %s %s %s > %s' % (ALIGNER_PATH, BIN, parameters, reference_db_file, reads_fasta, maf_file);
-	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
-	subprocess.call(command, shell=True);
-	sys.stderr.write('\n\n');
+	sys.stderr.write('[%s wrapper] Running %s...\n' % (MAPPER_NAME, MAPPER_NAME))
+
+	# command = '%s %s/%s %s %s %s > %s' % (basicdefines.measure_command(memtime_file), ALIGNER_PATH, BIN, parameters, reference_db_file, reads_fasta, maf_file)
+	# ATM not doing measurements
+	command = '%s/%s %s %s %s > %s' % (ALIGNER_PATH, BIN, parameters, reference_db_file, reads_fasta, maf_file)
+
+	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command))
+	subprocess.call(command, shell=True)
+	sys.stderr.write('\n\n')
 
 	# Run the alignment process, and measure execution time and memory.
-	sys.stderr.write('[%s wrapper] Converting the output MAF to SAM file...\n' % (MAPPER_NAME));
-	fp = open(sam_file, 'w');
-	fp.write(get_sam_header(reference_file));
-	fp.close();
-	# command = '%s %s/../scripts/maf-convert sam %s >> %s' % (basicdefines.measure_command(memtime_file_maftosam), ALIGNER_PATH, maf_file, sam_file);
-	command = '%s/../scripts/maf-convert sam %s >> %s' % (ALIGNER_PATH, maf_file, sam_file);
-	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
-	subprocess.call(command, shell=True);
-	sys.stderr.write('\n\n');
+	sys.stderr.write('[%s wrapper] Converting the output MAF to SAM file...\n' % (MAPPER_NAME))
+	fp = open(sam_file, 'w')
+	fp.write(get_sam_header(reference_file))
+	fp.close()
 
-	sys.stderr.write('[%s wrapper] %s wrapper script finished processing.\n' % (MAPPER_NAME, MAPPER_NAME));
+	# command = '%s %s/../scripts/maf-convert sam %s >> %s' % (basicdefines.measure_command(memtime_file_maftosam), ALIGNER_PATH, maf_file, tmpsam_file)
+	# ATM not doing measurements
+	command = '%s/../scripts/maf-convert sam %s >> %s' % (ALIGNER_PATH, maf_file, tmpsam_file)
+
+	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command))
+	subprocess.call(command, shell=True)
+	sys.stderr.write('\n\n')
+
+	# Adding quality values to LAST SAM file
+	sys.stderr.write('[%s wrapper] Adding quality values...\n' % MAPPER_NAME)
+	add_quality_values(tmpsam_file, reads_file, sam_file)
+
+	sys.stderr.write('[%s wrapper] %s wrapper script finished processing.\n' % (MAPPER_NAME, MAPPER_NAME))
 
 	return sam_file
 
@@ -140,13 +160,18 @@ def download_and_install():
 	subprocess.call(command, shell='True');
 	sys.stderr.write('\n');
 
+	sys.stderr.write('[%s wrapper] All instalation steps finished.\n' % (MAPPER_NAME));
+	sys.stderr.write('\n');
+
 
 
 def verbose_usage_and_exit():
 	sys.stderr.write('Usage:\n');
 	sys.stderr.write('\t%s mode [<reads_file> <reference_file> <machine_name> <output_path> [<output_suffix>]]\n' % sys.argv[0]);
 	sys.stderr.write('\n');
-	sys.stderr.write('\t- mode - either "run" or "install". Is "install" other parameters can be ommitted.\n');
+	sys.stderr.write('\t- mode          - either "run" or "install". If "install" other parameters can be ommitted.\n');
+	sys.stderr.write('\t- machine_name  - "illumina", "roche", "pacbio", "nanopore" or "default".\n');
+	sys.stderr.write('\t- output_suffix - suffix for the output filename.\n');
 
 	exit(0);
 

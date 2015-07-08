@@ -14,7 +14,6 @@ sys.path.append(SCRIPT_PATH + '/wrappers')
 import setup_realsim
 import basicdefines
 import wrapper_lastal
-import wrapper_bwamem
 import analyze_venn_of_mappings
 import fastqparser
 import utility_sam
@@ -44,13 +43,13 @@ def get_cprofile_path(cprofile):
 # Extracts error profile as CIGAR profile, from a SAM file
 # Considers only the best alignment for each SAM line and
 # considers only SAM lines whose chosen quality is greater then 0
-def extract_cprofile_from_LAST_SAM(reference_path, sam_path_lastal, profile='cprofile'):
+def extract_cprofile_from_SAM(reference_path, sam_path, profile='cprofile'):
 
 	sys.stderr.write('\n')
 
 	qnames_with_multiple_alignments = {};
 	sys.stderr.write('Loading SAM file into hash...\n');
-	[sam_hash, sam_hash_num_lines, sam_hash_num_unique_lines] = utility_sam.HashSAMWithFilter(sam_path_lastal, qnames_with_multiple_alignments);
+	[sam_hash, sam_hash_num_lines, sam_hash_num_unique_lines] = utility_sam.HashSAMWithFilter(sam_path, qnames_with_multiple_alignments);
 
 	sys.stderr.write('Loading reference from fastq file...\n')
 	reference_fastq = fastqparser.read_fastq(reference_path)
@@ -63,13 +62,17 @@ def extract_cprofile_from_LAST_SAM(reference_path, sam_path_lastal, profile='cpr
 	cprofile = CIGARProfile(profile, GCcontent)
 	for qname in sam_hash.iterkeys():
 		samline = sam_hash[qname]
-		# TODO: Revise CalcExtendedCIGAR to receive only relevant part of reference
-		cigar, gccontent = samline[0].CalcExtendedCIGARandGCContent(reference_seq)
-		pos = samline[0].pos
 		quality = samline[0].chosen_quality
-		quals = samline[0].qual
-		if quality > 0:
-			cprofile.appendCLine(CIGARLine(cigar, pos, quality, gccontent, quals))
+		# Skipping SAM lines with quality 0 and 255
+		# GraphMap generates SAM lines qith quality 255 that have empty CIGAR string
+		if quality > 0 and quality < 255:
+			# TODO: Revise CalcExtendedCIGAR to receive only relevant part of reference
+			cigar, gccontent = samline[0].CalcExtendedCIGARandGCContent(reference_seq)
+			pos = samline[0].pos
+			quals = samline[0].qual
+			qname = samline[0].qname
+			rname = samline[0].rname
+			cprofile.appendCLine(CIGARLine(cigar, pos, qname, rname, quality, gccontent, quals))
 
 	cprofile.mutCntTable = utility_sam.mutCntTable
 
@@ -77,7 +80,8 @@ def extract_cprofile_from_LAST_SAM(reference_path, sam_path_lastal, profile='cpr
 	sys.stderr.write('Saving CIGAR profile to:%s\n' % cprofilefilepath)
 	storeCProfile(cprofilefilepath, cprofile)
 
-
+# Deprecated:
+# Can be done using extract_profile_from_path by specifying only one aligner
 def extract_cprofile_with_LAST(reference_path, reads_path, technology, profile='cprofile'):
 	if (not os.path.exists(basicdefines.TOOLS_ROOT_ABS) or not os.path.exists(basicdefines.ALIGNERS_PATH_ROOT_ABS)):
 		sys.stderr.write('ERROR: Required tools not set up. Rerun the script with the "setup" option.\nExiting.\n\n')
@@ -105,27 +109,84 @@ def extract_cprofile_with_LAST(reference_path, reads_path, technology, profile='
 	# Adding quality values to LAST SAM file
 	add_quality_values(sam_path_lastal, reads_path, sam_with_quals_path)
 
-	extract_cprofile_from_LAST_SAM(reference_path, sam_with_quals_path, profile)
+	extract_cprofile_from_SAM(reference_path, sam_with_quals_path, profile)
 
 
-def extract_cprofile_from_SAMs(reference_path, sam_path_bwamem, sam_path_lastal, profile='cprofile'):
+
+def extract_cprofile_from_SAMs(reference_path, samfile_list, profile='cprofile'):
 
 	distance_threshold = -1			# This currently does nothing.
-	# compare_two_sams returns three dicts:
-	#	1. sam_hash1	-	hashed SAM file. Key of the dict is the qname of a SAM entry, and value is a list of SAMLine objects. List contains all alignments for the same qname
-	#						and is composed of at least one element. The list is sorted in the descending order of the MAPQ parameter is available (i.e. if it is different from 255),
-	#						otherwise it is sorted according to the AS value (again, if available).
-	#	2. sam_hash2	-	same as the previous parameter, but for the second given SAM file.
-	#	3. distance_to_qname_hash	-	Key of the dict is the distance between the mapping positions of the same read accross two SAM files. Value for each key contains
-	#									a list of qnames at that particular distance. To retreieve concrete info on a specific alignment for the given qname, one can
-	#									query the sam_hash1 and sam_hash2 objects.
-	[sam_hash_bwamem, sam_hash_lastal, distance_to_qname_hash] = analyze_venn_of_mappings.compare_two_sams(sam_path_bwamem, sam_path_lastal, distance_threshold, out_summary_prefix='')
-
-	extract_cprofile_from_dict(reference_path, sam_hash_bwamem, sam_hash_lastal, distance_to_qname_hash, profile)
 
 
+	if len(samfile_list) == 0:
+		sys.stderr.write('\n\nCannot extract Cprofile. Samfile list is empty. Exiting...')
+		exit(1)
+	elif len(samfile_list) == 1:
+		extract_cprofile_from_SAM(reference_path, samfile_list[0], profile)
+	elif len(samfile_list) == 2:
+		# compare_two_sams returns three dicts:
+		#	1. sam_hash1	-	hashed SAM file. Key of the dict is the qname of a SAM entry, and value is a list of SAMLine objects. List contains all alignments for the same qname
+		#						and is composed of at least one element. The list is sorted in the descending order of the MAPQ parameter is available (i.e. if it is different from 255),
+		#						otherwise it is sorted according to the AS value (again, if available).
+		#	2. sam_hash2	-	same as the previous parameter, but for the second given SAM file.
+		#	3. distance_to_qname_hash	-	Key of the dict is the distance between the mapping positions of the same read accross two SAM files. Value for each key contains
+		#									a list of qnames at that particular distance. To retreieve concrete info on a specific alignment for the given qname, one can
+		#									query the sam_hash1 and sam_hash2 objects.
+		[sam_hash_1, sam_hash_2, distance_to_qname_hash] = analyze_venn_of_mappings.compare_two_sams(samfile_list[0], samfile_list[1], distance_threshold)
+
+		extract_cprofile_from_2dict(reference_path, sam_hash_1, sam_hash_2, distance_to_qname_hash, profile)
+
+	else:
+		sys.stderr.write('\n\nExtracting CProfile from 3 or more SAM files...\n')
+		outdict, samhash_list = analyze_venn_of_mappings.compare_multiple_sams(samfile_list, distance_threshold)
+		extract_cprofile_from_dict(reference_path, samhash_list, outdict, profile)
+
+
+# Extracts error profile as CIGAR profile, from multiple dictionaries
+def extract_cprofile_from_dict(reference_path, samhash_list, outdict, profile='cprofile'):
+	# Load reference
+	sys.stderr.write('\n')
+	sys.stderr.write('Loading reference from fastq file...\n')
+	reference_fastq = fastqparser.read_fastq(reference_path)
+	reference_seq = reference_fastq[1][0]
+	GCcontent = fastqparser.gc_content(reference_seq)
+	cprofile = CIGARProfile(profile, GCcontent)
+
+	# Initialize mutation count table
+	utility_sam.init_mutCntTable()
+
+	# Using only qnames that were mapped to the same position by more than one aligner
+	for (qname, posdict) in outdict.iteritems():
+		for (pos, idxlist) in posdict.iteritems():
+			if len(idxlist) > 1:
+				# Build profile prom all aligments to the same position
+				for i in idxlist:
+					samhash = samhash_list[i]
+
+					samline = samhash[qname]
+					# TODO: Revise CalcExtendedCIGAR to receive only relevant part of reference
+					cigar, gccontent = samline[0].CalcExtendedCIGARandGCContent(reference_seq)
+					if cigar == '1D1D1D1D':
+						import pdb
+						pdb.set_trace()
+					pos = samline[0].pos
+					quality = samline[0].chosen_quality
+					quals = samline[0].qual
+					qname = samline[0].qname
+					rname = samline[0].rname
+					cprofile.appendCLine(CIGARLine(cigar, pos, qname, rname, quality, gccontent, quals))
+
+	cprofile.mutCntTable = utility_sam.mutCntTable
+
+	cprofilefilepath = os.path.join(profiles_path, profile + '.cpf')
+	sys.stderr.write('Saving CIGAR profile to:%s\n' % cprofilefilepath)
+	storeCProfile(cprofilefilepath, cprofile)
+
+
+
+# Keeping this function for compatibility reasons
 # Extracts error profile as CIGAR profile, from dictionaries
-def extract_cprofile_from_dict(reference_path, sam_hash_bwamem, sam_hash_lastal, distance_to_qname_hash, profile='cprofile'):
+def extract_cprofile_from_2dict(reference_path, sam_hash_bwamem, sam_hash_lastal, distance_to_qname_hash, profile='cprofile'):
 	# Load reference
 	sys.stderr.write('\n')
 	sys.stderr.write('Loading reference from fastq file...\n')
@@ -147,14 +208,18 @@ def extract_cprofile_from_dict(reference_path, sam_hash_bwamem, sam_hash_lastal,
 		pos = lastsamline[0].pos
 		quality = lastsamline[0].chosen_quality
 		quals = lastsamline[0].qual
-		cprofile.appendCLine(CIGARLine(cigar, pos, quality, gccontent, quals))
+		qname = lastsamline[0].qname
+		rname = lastsamline[0].rname
+		cprofile.appendCLine(CIGARLine(cigar, pos, qname, rname, quality, gccontent, quals))
 
 		bwasamline = sam_hash_bwamem[qname]
 		cigar, gccontent = bwasamline[0].CalcExtendedCIGARandGCContent(reference_seq)
 		pos = bwasamline[0].pos
 		quality = bwasamline[0].chosen_quality
 		qual = bwasamline[0].qual
-		cprofile.appendCLine(CIGARLine(cigar, pos, quality, gccontent, qual))
+		qname = bwasamline[0].qname
+		rname = bwasamline[0].rname
+		cprofile.appendCLine(CIGARLine(cigar, pos, qname, rname, quality, gccontent, qual))
 
 	cprofile.mutCntTable = utility_sam.mutCntTable
 
@@ -163,7 +228,7 @@ def extract_cprofile_from_dict(reference_path, sam_hash_bwamem, sam_hash_lastal,
 	storeCProfile(cprofilefilepath, cprofile)
 
 
-# Not used. MSA was discarded as an idea
+# Not used anymore. MSA was discarded as an idea
 def extract_MSAprofile_from_dict(reference_path, sam_hash_bwamem, sam_hash_lastal, distance_to_qname_hash):
 	# Load reference
 	sys.stderr.write('\n')
@@ -323,7 +388,19 @@ def extract_MSAprofile_from_dict(reference_path, sam_hash_bwamem, sam_hash_lasta
 
 
 
-def extract_cprofile_from_path(reference_path, reads_path, technology, profile = 'cprofile'):
+def extract_cprofile_from_path(reference_path, reads_path, technology, profile = 'cprofile', aligners = ['lastal', 'bwamem']):
+	if (not os.path.exists(basicdefines.TOOLS_ROOT_ABS) or not os.path.exists(basicdefines.ALIGNERS_PATH_ROOT_ABS)):
+		sys.stderr.write('ERROR: Required tools not set up. Rerun the script with the "setup" option.\nExiting.\n\n')
+		exit(1)
+
+	# Run each aligner on given reference and reads, get .sam files and copied reference
+	samfile_list, new_ref_path = align(reference_path, reads_path, technology, aligners)
+
+	extract_cprofile_from_SAMs(new_ref_path, samfile_list, profile)
+
+
+
+def align(reference_path, reads_path, technology, aligners = ['lastal', 'bwamem']):
 	if (not os.path.exists(basicdefines.TOOLS_ROOT_ABS) or not os.path.exists(basicdefines.ALIGNERS_PATH_ROOT_ABS)):
 		sys.stderr.write('ERROR: Required tools not set up. Rerun the script with the "setup" option.\nExiting.\n\n')
 		exit(1)
@@ -331,6 +408,7 @@ def extract_cprofile_from_path(reference_path, reads_path, technology, profile =
 	# output_path = '%s/../intermediate' % SCRIPT_PATH;
 	# output path is a global variable
 	uuid_string = str(uuid.uuid4())			# Generate a random UUID so that multiple runs don't clash.
+	samfile_list = []
 
 	# copy reference to output path with the same uuid
 	ref_filename = "REF_" + uuid_string + ".fastq"
@@ -341,19 +419,20 @@ def extract_cprofile_from_path(reference_path, reads_path, technology, profile =
 		sys.stderr.write('Creating folder "%s".\n' % (output_path))
 		os.makedirs(output_path)
 
-	sam_path_bwamem = wrapper_bwamem.run(reads_path, reference_path, technology, output_path, uuid_string)
-	sam_path_lastal = wrapper_lastal.run(reads_path, reference_path, technology, output_path, uuid_string)
+	sys.stderr.write('\n\nAligning reads to reference:')
+	# Run alignment for each given aligner
+	for aligner in aligners:
+		sys.stderr.write('\nAligning with %s' % aligner)
+		wrapper_basename = 'wrapper_' + aligner
 
-	# Adding quality values to LAST SAM file
-	basename = os.path.basename(sam_path_lastal)
-	dirname = os.path.dirname(sam_path_lastal)
+		samfile = ''
+		command = 'import %s; samfile = %s.run(reads_path, reference_path, technology, output_path, uuid_string)' % (wrapper_basename, wrapper_basename)
+		samfile_list.append(samfile)
+		exec(command)
 
-	# Adding Q in front of filename for sam file with quals
-	sam_with_quals_path = os.path.join(dirname, 'Q' + basename)
+	sys.stderr.write('\n')
 
-	add_quality_values(sam_path_lastal, reads_path, sam_with_quals_path)
-
-	extract_cprofile_from_SAMs(new_ref_path, sam_path_bwamem, sam_with_quals_path, profile)
+	return samfile_list, new_ref_path
 
 
 def calculate_statistics(reference_path, sam_path_bwamem, sam_path_lastal):
@@ -451,21 +530,67 @@ def cleanup():
 		sys.stdout.write('\nRemoving: %s' % path)
 		os.remove(path)
 
-
-# Lists all available CIGAR profiles
-# All profiles are stored in a separate folder in files ending with .cpf
-def list_profiles():
-	sys.stdout.write('\nAvailable profiles:')
+# A helper function that return all available profiles from 'profiles' folder
+def get_allprofiles():
+	profiles = []
 	for filename in os.listdir(basicdefines.PROFILES_PATH_ABS):
 		if filename.endswith('.cpf'):
 			profilename = filename[:-4]
-			sys.stdout.write('\n\t- %s' % profilename)
+			profiles.append(profilename)
 
-	sys.stdout.write('\n')
+	return profiles
 
 
+# A helper function that return all available wrappers from 'src/wrappers' folder
+def get_allwrappers():
+	wrappers = []
+	for filename in os.listdir(basicdefines.WRAPPERS_PATH_ROOT_ABS):
+		if filename.startswith('wrapper_') and filename.endswith('.py'):
+			wrappername = filename[8:-3]
+			wrappers.append(wrappername)
 
-def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = None, coverage = None, header = None, fastq = True):
+	return wrappers
+
+
+# Lists all available CIGAR profiles and aligners
+# All profiles are stored in a separate folder in files ending with .cpf
+# All aligners are stored in a separate folder in python files starting with 'wrapper_'
+def list_profiles_aligners():
+	sys.stdout.write('\nAvailable profiles:')
+	profiles = get_allprofiles()
+	for profile in profiles:
+		sys.stdout.write('\n\t- %s' % profile)
+
+	sys.stdout.write('\n\n')
+
+	sys.stdout.write('\nAvailable wrappers:')
+	wrappers = get_allwrappers()
+	for wrapper in wrappers:
+		sys.stdout.write('\n\t- %s' % wrapper)
+
+	sys.stdout.write('\n\n')
+
+
+# Checks intermediate folder for .sam files that could be used to extract a cprofile
+# Return all distinct UUIDs, so that profile extraction for each UUID could be specified
+def list_alignruns():
+	uuidlist = []
+	for filename in os.listdir(basicdefines.INTERMEDIATE_PATH_ROOT_ABS):
+		if filename.endswith('.sam'):
+			# Extract UUID from the file
+			idx = filename.find('-')
+			uuid = filename[idx+1:-4]
+			if uuid not in uuidlist:
+				uuidlist.append(uuid)
+
+	sys.stderr.write('\n\nTesr run UUIDs, base on existing SAM files:')
+	for uuid in uuidlist:
+		sys.stderr.write('\n\t- %s' % uuid)
+
+	sys.stderr.write('\n')
+
+
+def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = None, coverage = None, header = None, outtype = 'fastq'):
 
 	profile_path = get_cprofile_path(cprofile)
 
@@ -500,23 +625,46 @@ def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = Non
 		# numreads = len(reference)*coverage / avg_read_length
 		numreads = len(reference_seq) * coverage / avglength
 
-	if fastq:
-		firstchar = '@'
-	else:
-		firstchar = '>'
-
-	# Writing simulated reads
+	# Simulating reads as a list of SAMLines
 	sys.stderr.write('Simulating reads...\n')
-	with open(readspath, 'w') as readsfile:
-		for i in xrange(numreads):
-			qname = '%s_simulated_read_%d' % (header, i)
-			read, quals = cprofile.generateRandomRead(reference_seq)
-			readsfile.write(firstchar + qname + '\n')
-			readsfile.write(read + '\n')
-			# If quals exist in the profile and files needs to be fastq, write them to the file as well
-			if quals is not None and fastq:
+	sline_list = []
+	for i in xrange(numreads):
+		qname = '%s_simulated_read_%d' % (header, i)
+		sline = cprofile.generateRandomRead(reference_seq)
+		sline.qname = qname
+		sline.rname = header
+		sline_list.append(sline)
+
+	sys.stderr.write('Writting reads to a file...\n')
+	if outtype == 'fastq':
+		firstchar = '@'
+		with open(readspath, 'w') as readsfile:
+			for sline in sline_list:
+				read = sline.seq
+				quals = sline.qual
+				qname = sline.qname
+				readsfile.write(firstchar + qname + '\n')
+				readsfile.write(read + '\n')
 				readsfile.write('+' + qname + '\n')
-				readsfile.write(quals + '\n')
+				readsfile.write(quals + '\n')			# If type is fastq, I'm assuming quals exist in the profile
+	elif outtype == 'fasta':
+		firstchar = '>'
+		with open(readspath, 'w') as readsfile:
+			for sline in sline_list:
+				read = sline.seq
+				qname = sline.qname
+				readsfile.write(firstchar + qname + '\n')
+				readsfile.write(read + '\n')
+	elif outtype == 'sam':
+		# Writting sam file
+		# TODO: Put this somewhere in a function
+		with open(readspath, 'w') as readsfile:
+			readsfile.write('@HD\tVN:%s\tSO:unsorted\n' % cprofile.version)
+			for sline in sline_list:
+				readsfile.write(sline.tabDelimited())
+	else:
+		sys.stderr.write('\n\nInvalid outtype while simulating reads with CProfile! Exiting ...\n')
+		exit(1)
 
 
 def spike_with_cprofile(cprofile, reference_path, reads_file,  output_file, numreads = None, coverage = None, header = None, fastq = True):
@@ -573,7 +721,7 @@ def calculate_statistics_for_CProfile(cprofile):
 	sys.stdout.write('\n')
 	sys.stdout.write('CIGAR profile: %s\n' % cprofile.name)
 	sys.stdout.write('Profile GC content: %f\n' % cprofile.GCcontent)
-	sys.stdout.write('Number of lines: %d\n' % len(cprofile.clines))
+	sys.stdout.write('Number of lines: %d\n' % numlines)
 	sys.stdout.write('Profile read length (MIN|AVG|MAX): (%d | %d | %d)\n' % (minlen, sumlen/len(cprofile.clines), maxlen))
 	sys.stdout.write('GC content per read (MIN|AVG|MAX): (%0.4f | %0.4f | %0.4f)\n' % (gcmin, gcsum/len(cprofile.clines), gcmax))
 	sys.stdout.write('Good / bad quals: (%d / %d)\n' % (numgoodquals, numbadquals))
@@ -660,6 +808,7 @@ def verbose_usage_and_exit():
 	sys.stderr.write('\t\tsetup\n')
 	sys.stderr.write('\t\tcleanup\n')
 	sys.stderr.write('\t\textract\n')
+	sys.stderr.write('\t\talign\n')
 	sys.stderr.write('\t\textract_with_LAST\n')
 	sys.stderr.write('\t\textract_from_SAMs\n')
 	sys.stderr.write('\t\textract_from_SAM\n')
@@ -667,7 +816,8 @@ def verbose_usage_and_exit():
 	sys.stderr.write('\t\tspike_with_CProfile\n')
 	sys.stderr.write('\t\tcombine_files\n')
 	sys.stderr.write('\t\tcombine_profiles\n')
-	sys.stderr.write('\t\tlist_profiles\n')
+	sys.stderr.write('\t\tlist\n')
+	sys.stderr.write('\t\tlist_alignruns\n')
 	sys.stderr.write('\t\tstatistics_from_SAMs\n')
 	sys.stderr.write('\t\tstatistics_for_CProfile\n')
 	sys.stderr.write('\n')
@@ -698,14 +848,19 @@ if __name__ == '__main__':
 		cleanup()
 
 	elif (mode == 'extract'):
-		if (len(sys.argv) != 6):
+		if (len(sys.argv) < 6):
 			sys.stderr.write('Extracts the error profile from a given set of reads and a reference genome.\n')
 			sys.stderr.write('Error profile is stored in a file as CIGARProfile.\n')
 			sys.stderr.write('\n')
 			sys.stderr.write('Usage:\n')
-			sys.stderr.write('\t%s %s <reference> <reads> technology <profile>' % (sys.argv[0], sys.argv[1]))
+			sys.stderr.write('\t%s %s <reference> <reads> technology <profile> options' % (sys.argv[0], sys.argv[1]))
 			sys.stderr.write('\n')
 			sys.stderr.write('\ttechnology - "illumina", "pacbio" or "nanopore"\n')
+			sys.stderr.write('\toptions:"\n')
+			sys.stderr.write('\t-al <aligners> - comma separated list of aligners to be used"\n')
+			sys.stderr.write('\t                 wrapper files are of the form: wrapper_[aligner name].py"\n')
+			sys.stderr.write('\t                 available wrappers can be obtained using option: list\n')
+			sys.stderr.write('\t                 if not specified, all available aligners are used"\n')
 			sys.stderr.write('\n')
 			exit(1)
 
@@ -716,11 +871,82 @@ if __name__ == '__main__':
 			sys.stderr.write('Unsuported sequencing technology!\n\n')
 			verbose_usage_and_exit()
 		profile = sys.argv[5]
-		extract_cprofile_from_path(reference_path, reads_path, technology, profile)
+
+		used_aligners = []
+		all_aligners = get_allwrappers()
+		for i in range(6, len(sys.argv), 2):
+			if sys.argv[i] == '-al':
+				alignersstring = sys.argv[i+1]
+				aligners = alignersstring.split(',')
+				for aligner in aligners:
+					if aligner not in all_aligners:
+						sys.stderr.write('\nUnavailable aligner: %s\n\n' % aligner)
+						exit(1)
+					else:
+						used_aligners.append(aligner)
+			else:
+				sys.stderr.write('Invalid parameter!.\n\n')
+				exit()
+
+		# If no aligners are specified, use all of them
+		if len(used_aligners) == 0:
+			used_aligners = all_aligners
+
+		extract_cprofile_from_path(reference_path, reads_path, technology, profile, used_aligners)
+
+	elif (mode == 'align'):
+		if (len(sys.argv) < 5):
+			sys.stderr.write('Alignes a given set of reads to a given reference genome using specified aligners.\n')
+			sys.stderr.write('The result is a set of SAM files\n')
+			sys.stderr.write('\n')
+			sys.stderr.write('Usage:\n')
+			sys.stderr.write('\t%s %s <reference> <reads> technology options' % (sys.argv[0], sys.argv[1]))
+			sys.stderr.write('\n')
+			sys.stderr.write('\ttechnology - "illumina", "pacbio" or "nanopore"\n')
+			sys.stderr.write('\toptions:"\n')
+			sys.stderr.write('\t-al <aligners> - comma separated list of aligners to be used"\n')
+			sys.stderr.write('\t                 wrapper files are of the form: wrapper_[aligner name].py"\n')
+			sys.stderr.write('\t                 available wrappers can be obtained using option: list\n')
+			sys.stderr.write('\t                 if not specified, all available aligners are used"\n')
+			sys.stderr.write('\n')
+			exit(1)
+
+		reference_path = sys.argv[2]
+		reads_path = sys.argv[3]
+		technology = sys.argv[4]
+		if not (technology in ['illumina', 'pacbio', 'nanopore']):
+			sys.stderr.write('Unsuported sequencing technology!\n\n')
+			verbose_usage_and_exit()
+
+		used_aligners = []
+		all_aligners = get_allwrappers()
+		for i in range(5, len(sys.argv), 2):
+			if sys.argv[i] == '-al':
+				alignersstring = sys.argv[i+1]
+				aligners = alignersstring.split(',')
+				for aligner in aligners:
+					if aligner not in all_aligners:
+						sys.stderr.write('\nUnavailable aligner: %s\n\n' % aligner)
+						exit(1)
+					else:
+						used_aligners.append(aligner)
+			else:
+				sys.stderr.write('Invalid parameter!.\n\n')
+				exit()
+
+		# If no aligners are specified, use all of them
+		if len(used_aligners) == 0:
+			used_aligners = all_aligners
+
+		samfile_list = align(reference_path, reads_path, technology, used_aligners)
+
+		sys.stderr.write('\nProduced SAM files:')
+		for samfile in samfile_list:
+			sys.stderr.write('\n%s' % samfile)
 
 	elif (mode == 'extract_with_LAST'):
 		if (len(sys.argv) != 6):
-			sys.stderr.write('Extracts the error profile using only LAST aligner.\n')
+			sys.stderr.write('(deprecated) Extracts the error profile using only LAST aligner.\n')
 			sys.stderr.write('Error profile is stored in a file as CIGARProfile.\n')
 			sys.stderr.write('\n')
 			sys.stderr.write('Usage:\n')
@@ -740,50 +966,58 @@ if __name__ == '__main__':
 		extract_cprofile_with_LAST(reference_path, reads_path, technology, profile)
 
 	# So that aligners do not need to be run every time
-	# Speeds up testing
+	# A CProfile can be extracted from SAM files
 	elif (mode == 'extract_from_SAMs'):
-		if (len(sys.argv) != 7):
-			sys.stderr.write('Extracts the error profile from a given set of SAM files (BWA and LAST).\n')
-			sys.stderr.write('Only SAM lines aligned to the same place by both aligners are used.\n')
+		if (len(sys.argv) < 6):
+			sys.stderr.write('Extracts the error profile from a given set of SAM files.\n')
+			sys.stderr.write('Only SAM lines aligned to the same position by at least two aligners are used.\n')
 			sys.stderr.write('Error profile is stored in a file as CIGARProfile.\n')
 			sys.stderr.write('\n')
 			sys.stderr.write('Usage:\n')
-			sys.stderr.write('\t%s %s <reference> <BWA_SAM> <LAST_SAM> technology <profile>' % (sys.argv[0], sys.argv[1]))
-			sys.stderr.write('\n')
-			sys.stderr.write('\ttechnology - "illumina", "pacbio" or "nanopore"\n')
+			sys.stderr.write('\t%s %s <reference> -sams [<SAM file>...] <profile>' % (sys.argv[0], sys.argv[1]))
+			sys.stderr.write('\t%s %s <reference> -uuid <UUID> <profile>' % (sys.argv[0], sys.argv[1]))
 			sys.stderr.write('\n')
 			exit(1)
 
 		reference_path = sys.argv[2]
-		sam_path_bwamem = sys.argv[3]
-		sam_path_lastal = sys.argv[4]
-		technology = sys.argv[5]
-		if not (technology in ['illumina', 'pacbio', 'nanopore']):
-			sys.stderr.write('Unsuported sequencing technology!\n\n')
+		option = sys.argv[3]
+		samfile_list = []
+		if option == '-sams':
+			# Extracting SAM files, last argument is profile name
+			for i in range(4, len(sys.argv)-1):
+				samfile = sys.argv[i]
+				samfile_list.append(samfile)
+			profile = sys.argv[-1]
+			extract_cprofile_from_SAMs(reference_path, samfile_list, profile)
+		elif option == '-uuid':
+			uuid_string = sys.argv[4]
+			profile = sys.argv[5]
+			for filename in os.listdir(basicdefines.INTERMEDIATE_PATH_ROOT_ABS):
+				if filename.endswith('%s.sam' % uuid_string):
+					samfile_path = os.path.join(basicdefines.INTERMEDIATE_PATH_ROOT_ABS, filename)
+					samfile_list.append(samfile_path)
+			extract_cprofile_from_SAMs(reference_path, samfile_list, profile)
+
+		else:
+			sys.stderr.write('\n\nInvalid option! Must specify either SAM files or uuid! Exiting...\n')
 			verbose_usage_and_exit()
-		profile = sys.argv[6]
-		extract_cprofile_from_SAMs(reference_path, sam_path_bwamem, sam_path_lastal, profile)
+
+
 
 	elif (mode == 'extract_from_SAM'):
-		if (len(sys.argv) != 6):
-			sys.stderr.write('Extracts the error profile using only one SAM file (intended for LAST).\n')
+		if (len(sys.argv) != 5):
+			sys.stderr.write('(deprecated) Extracts the error profile using only one SAM file.\n')
 			sys.stderr.write('Error profile is stored in a file as CIGARProfile.\n')
 			sys.stderr.write('\n')
 			sys.stderr.write('Usage:\n')
-			sys.stderr.write('\t%s %s <reference> <SAM_file> technology <profile>' % (sys.argv[0], sys.argv[1]))
-			sys.stderr.write('\n')
-			sys.stderr.write('\ttechnology - "illumina", "pacbio" or "nanopore"\n')
+			sys.stderr.write('\t%s %s <reference> <SAM_file> <profile>' % (sys.argv[0], sys.argv[1]))
 			sys.stderr.write('\n')
 			exit(1)
 
 		reference_path = sys.argv[2]
-		sam_path_lastal = sys.argv[3]
-		technology = sys.argv[4]
-		if not (technology in ['illumina', 'pacbio', 'nanopore']):
-			sys.stderr.write('Unsuported sequencing technology!\n\n')
-			verbose_usage_and_exit()
-		profile = sys.argv[5]
-		extract_cprofile_from_LAST_SAM(reference_path, sam_path_lastal, profile)
+		sam_path = sys.argv[3]
+		profile = sys.argv[4]
+		extract_cprofile_from_SAM(reference_path, sam_path, profile)
 
 	elif (mode == 'simulate_with_CProfile'):
 		if (len(sys.argv) < 5):
@@ -797,7 +1031,7 @@ if __name__ == '__main__':
 			sys.stderr.write('\t\t-h header\n')
 			sys.stderr.write('\t\t-n number_of_reads\n')
 			sys.stderr.write('\t\t-c coverage\n')
-			sys.stderr.write('\t\t-t type (fasta or fatsq, fastq is default)\n')
+			sys.stderr.write('\t\t-t type (fasta, fatsq or sam, fastq is default)\n')
 			sys.stderr.write('\n')
 			exit(1)
 
@@ -808,9 +1042,11 @@ if __name__ == '__main__':
 		# Look at extension of the output file to decide whether to generate reads in fasta or fastq format
 		# Format can also be specified by parameter -t. Parameter is stronger then file extension.
 		# If nothing is specified, fastq reads are generated
-		fastq = True
+		outtype = 'fastq'
 		if output_file.endswith('.fa') or output_file.endswith('.fasta'):
-			fastq = False
+			outtype = 'fasta'
+		elif output_file.endswith('.sam'):
+			outtype = 'sam'
 
 		# parsing options
 		header = numreads = coverage = None
@@ -830,13 +1066,9 @@ if __name__ == '__main__':
 					sys.stderr.write('Wrong value for parameter "coverage"! Value needs to be an int.\n\n')
 					exit()
 			elif sys.argv[i] == '-t':
-				ftype = sys.argv[i+1].lower()
-				if ftype == 'fastq':
-					fastq = True
-				elif ftype == 'fasta':
-					fastq = False
-				else:
-					sys.stderr.write('Parameter -t goes with \'fasta\' or \'fastq\'.\n\n')
+				outtype = sys.argv[i+1].lower()
+				if outtype not in ('fastq', 'fasta', 'sam'):
+					sys.stderr.write('Parameter -t goes with \'fasta\', \'fastq\' or \'sam\'.\n\n')
 					exit()
 			else:
 				sys.stderr.write('Invalid parameter!.\n\n')
@@ -846,7 +1078,7 @@ if __name__ == '__main__':
 			sys.stderr.write('Either "coverage" or "number of reads" parameter must be specified.\n\n')
 			exit()
 
-		simulate_with_cprofile(profile_path, reference_path, output_file, numreads, coverage, header, fastq)
+		simulate_with_cprofile(profile_path, reference_path, output_file, numreads, coverage, header, outtype)
 
 	elif (mode == 'spike_with_CProfile'):
 		if (len(sys.argv) != 6):
@@ -942,14 +1174,23 @@ if __name__ == '__main__':
 		# TODO: implement combining two CIGAR profiles
 		sys.stderr.write('\n\nCombining profiles is not yet implemented!\n')
 
-	elif (mode == 'list_profiles'):
+	elif (mode == 'list'):
 		if (len(sys.argv) != 2):
-			sys.stderr.write('Lists available profiles.\n')
+			sys.stderr.write('Lists available profiles and aligners.\n')
 			sys.stderr.write('Requires no additional parameters to run.\n')
 			sys.stderr.write('\n')
 			exit(1)
 
-		list_profiles()
+		list_profiles_aligners()
+
+	elif (mode == 'list_alignruns'):
+		if (len(sys.argv) != 2):
+			sys.stderr.write('Lists available profiles and aligners.\n')
+			sys.stderr.write('Requires no additional parameters to run.\n')
+			sys.stderr.write('\n')
+			exit(1)
+
+		list_alignruns()
 
 	elif (mode == 'statistics_from_SAMs'):
 		if (len(sys.argv) != 6):

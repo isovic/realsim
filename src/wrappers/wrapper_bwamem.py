@@ -3,19 +3,18 @@
 import os
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__));
 
-import sys;
-sys.path.append(SCRIPT_PATH + '/../src');
+import sys
+sys.path.append(SCRIPT_PATH + '/../src')
 
-import subprocess;
-import multiprocessing;
+import subprocess
+import multiprocessing
 
-import basicdefines;
+import basicdefines
 
-ALIGNER_URL = 'https://github.com/lh3/bwa.git';
-# ALIGNER_PATH = SCRIPT_PATH + '/../aligners/bwa/';
-ALIGNER_PATH = basicdefines.ALIGNERS_PATH_ROOT_ABS + '/bwa';
-BIN = 'bwa';
-MAPPER_NAME = 'BWAMEM';
+ALIGNER_URL = 'https://github.com/lh3/bwa.git'
+ALIGNER_PATH = os.path.join(basicdefines.ALIGNERS_PATH_ROOT_ABS, 'bwa')
+BIN = 'bwa'
+MAPPER_NAME = 'BWAMEM'
 
 
 
@@ -29,7 +28,7 @@ MAPPER_NAME = 'BWAMEM';
 #	output_suffix		A custom suffix that can be added to the output filename.
 def run(reads_file, reference_file, machine_name, output_path, output_suffix=''):
 	parameters = '';
-	num_threads = multiprocessing.cpu_count();
+	num_threads = multiprocessing.cpu_count() / 2;
 
 	if ((machine_name.lower() == 'illumina') or (machine_name.lower() == 'roche')):
 		parameters = '-t %s' % str(num_threads);
@@ -40,16 +39,18 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 	elif ((machine_name.lower() == 'nanopore')):
 		parameters = '-t %s -x ont2d' % str(num_threads);
 
+	elif ((machine_name.lower() == 'longindel')):
+		parameters = '-t %s -x ont2d -w 1200 -d 1200' % str(num_threads);
+
+	elif ((machine_name.lower() == 'longindel2')):
+		parameters = '-t %s -x ont2d -w 5000 -d 5000' % str(num_threads);
+
 	elif ((machine_name.lower() == 'debug')):
 		parameters = '-t %s' % str(num_threads);
 
 	else:			# default
 		parameters = '-t %s' % str(num_threads);
 
-
-	# Increase penalty for clipping from default 5 to 20
-	# KK: Didn't seem to have significant effect
-	parameters = parameters + ' -L 20'
 
 
 	if (output_suffix != ''):
@@ -62,21 +63,28 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 	memtime_file = '%s/%s.memtime' % (output_path, output_filename);
 	memtime_file_index = '%s/%s-index.memtime' % (output_path, output_filename);
 
-	if (not os.path.exists(reference_file + '.bwt')):
-		# Run the indexing process, and measure execution time and memory.
+	# Run the indexing process, and measure execution time and memory.
+	if (True or (not os.path.exists(reference_file + '.bwt'))):
 		sys.stderr.write('[%s wrapper] Generating index...\n' % (MAPPER_NAME));
-		# command = '%s %s/%s index %s' % (basicdefines.measure_command(memtime_file_index), ALIGNER_PATH, BIN, reference_file);
-		command = '%s/%s index %s' % (ALIGNER_PATH, BIN, reference_file);
+
+		# command = '%s %s/%s index %s' % (basicdefines.measure_command(memtime_file_index), ALIGNER_PATH, BIN, reference_file)
+		# ATM doing it without measurements
+		command = '%s/%s index %s' % (ALIGNER_PATH, BIN, reference_file)
+
 		sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
 		subprocess.call(command, shell=True);
 		sys.stderr.write('\n\n');
 	else:
 		sys.stderr.write('[%s wrapper] Reference index already exists. Continuing.\n' % (MAPPER_NAME));
+		sys.stderr.flush();
 
 	# Run the alignment process, and measure execution time and memory.
 	sys.stderr.write('[%s wrapper] Running %s...\n' % (MAPPER_NAME, MAPPER_NAME));
+
 	# command = '%s %s/%s mem %s %s %s > %s' % (basicdefines.measure_command(memtime_file), ALIGNER_PATH, BIN, parameters, reference_file, reads_file, sam_file);
-	command = '%s/%s mem %s %s %s > %s' % (ALIGNER_PATH, BIN, parameters, reference_file, reads_file, sam_file);
+	# ATM doiing it without measurements
+	command = '%s/%s mem %s %s %s > %s' % (ALIGNER_PATH, BIN, parameters, reference_file, reads_file, sam_file)
+
 	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
 	subprocess.call(command, shell=True);
 	sys.stderr.write('\n\n');
@@ -96,9 +104,17 @@ def download_and_install():
 	subprocess.call(command, shell='True');
 	sys.stderr.write('\n');
 
+	sys.stderr.write('[%s wrapper] Checking out commit "eb428d7d31ced059ad39af2701a22ebe6d175657" for reproducibility purposes.\n' % (MAPPER_NAME));
+	command = 'cd %s; git checkout eb428d7d31ced059ad39af2701a22ebe6d175657' % (ALIGNER_PATH);
+	subprocess.call(command, shell='True');
+	sys.stderr.write('\n');
+
 	sys.stderr.write('[%s wrapper] Running make.\n' % (MAPPER_NAME));
 	command = 'cd %s; make' % (ALIGNER_PATH);
 	subprocess.call(command, shell='True');
+	sys.stderr.write('\n');
+
+	sys.stderr.write('[%s wrapper] All instalation steps finished.\n' % (MAPPER_NAME));
 	sys.stderr.write('\n');
 
 
@@ -107,7 +123,9 @@ def verbose_usage_and_exit():
 	sys.stderr.write('Usage:\n');
 	sys.stderr.write('\t%s mode [<reads_file> <reference_file> <machine_name> <output_path> [<output_suffix>]]\n' % sys.argv[0]);
 	sys.stderr.write('\n');
-	sys.stderr.write('\t- mode - either "run" or "install". Is "install" other parameters can be ommitted.\n');
+	sys.stderr.write('\t- mode          - either "run" or "install". If "install" other parameters can be ommitted.\n');
+	sys.stderr.write('\t- machine_name  - "illumina", "roche", "pacbio", "nanopore" or "default".\n');
+	sys.stderr.write('\t- output_suffix - suffix for the output filename.\n');
 
 	exit(0);
 

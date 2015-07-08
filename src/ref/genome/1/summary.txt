@@ -1,0 +1,13 @@
+#Summary
+#Generated on	Fri Jul 03 15:55:37 CEST 2015
+#Version	5
+chroms	1
+bases	2200406
+defined	2184406
+undefined	16000
+contigs	1
+scaffolds	1
+interpad	300
+source	/home/kkrizanovic/sim/CCS/sd_0020.ref
+bytes	2215707
+last modified	1424801170000

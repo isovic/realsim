@@ -12,8 +12,8 @@ import multiprocessing;
 import basicdefines;
 
 ALIGNER_URL = 'https://github.com/PacificBiosciences/blasr.git';
-ALIGNER_PATH = SCRIPT_PATH + '/../aligners/blasr';
-BIN = 'alignment/bin/blasr';
+ALIGNER_PATH = os.path.join(basicdefines.ALIGNERS_PATH_ROOT_ABS, 'blasr')
+BIN = 'blasr';
 MAPPER_NAME = 'BLASR';
 
 
@@ -27,54 +27,62 @@ MAPPER_NAME = 'BLASR';
 #	output_path			Folder to which the output will be placed to. Filename will be automatically generated according to the name of the mapper being run.
 #	output_suffix		A custom suffix that can be added to the output filename.
 def run(reads_file, reference_file, machine_name, output_path, output_suffix=''):
-	parameters = '';
-	num_threads = multiprocessing.cpu_count();
+	parameters = ''
+	num_threads = multiprocessing.cpu_count()
 
 	if ((machine_name.lower() == 'illumina') or (machine_name.lower() == 'roche')):
-		parameters = '-nproc %s -sam -bestn 1 -minMatch 7' % str(num_threads);
+		parameters = '-nproc %s -sam -bestn 1 -minMatch 7' % str(num_threads)
 
 	elif ((machine_name.lower() == 'pacbio')):
-		parameters = '-nproc %s -sam -bestn 1' % str(num_threads);
+		parameters = '-nproc %s -sam -bestn 1' % str(num_threads)
 
 	elif ((machine_name.lower() == 'nanopore')):
-		parameters = '-nproc %s -sam -bestn 1' % str(num_threads);
+		parameters = '-nproc %s -sam -bestn 1' % str(num_threads)
 
 	elif ((machine_name.lower() == 'debug')):
-		parameters = '-nproc %s -sam -bestn 1' % str(num_threads);
+		parameters = '-nproc %s -sam -bestn 1' % str(num_threads)
 
 	else:			# default
-		parameters = '-nproc %s -sam -bestn 1' % str(num_threads);
+		parameters = '-nproc %s -sam -bestn 1' % str(num_threads)
 
 
 
 	if (output_suffix != ''):
-		output_filename = '%s-%s' % (MAPPER_NAME, output_suffix);
+		output_filename = '%s-%s' % (MAPPER_NAME, output_suffix)
 	else:
-		output_filename = MAPPER_NAME;
-	
-	reads_basename = os.path.splitext(os.path.basename(reads_file))[0];
-	sam_file = '%s/%s.sam' % (output_path, output_filename);
-	memtime_file = '%s/%s.memtime' % (output_path, output_filename);
-	memtime_file_index = '%s/%s-index.memtime' % (output_path, output_filename);
-	
+		output_filename = MAPPER_NAME
+
+	reads_basename = os.path.splitext(os.path.basename(reads_file))[0]
+	sam_file = '%s/%s.sam' % (output_path, output_filename)
+	memtime_file = '%s/%s.memtime' % (output_path, output_filename)
+	memtime_file_index = '%s/%s-index.memtime' % (output_path, output_filename)
+
 	if (not os.path.exists(reference_file + '.blasrsa')):
 		# Run the indexing process, and measure execution time and memory.
-		sys.stderr.write('[%s wrapper] Generating index...\n' % (MAPPER_NAME));
-		command = '%s %s/alignment/bin/sawriter %s.blasrsa %s' % (basicdefines.measure_command(memtime_file_index), ALIGNER_PATH, reference_file, reference_file);
-		sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
-		subprocess.call(command, shell=True);
-		sys.stderr.write('\n\n');
+		sys.stderr.write('[%s wrapper] Generating index...\n' % (MAPPER_NAME))
+
+		# command = '%s %s/alignment/bin/sawriter %s.blasrsa %s' % (basicdefines.measure_command(memtime_file_index), ALIGNER_PATH, reference_file, reference_file)
+		# ATM doiing it without measurements
+		command = '%s/alignment/bin/sawriter %s.blasrsa %s' % (ALIGNER_PATH, reference_file, reference_file)
+
+		sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command))
+		subprocess.call(command, shell=True)
+		sys.stderr.write('\n\n')
 	else:
-		sys.stderr.write('[%s wrapper] Reference index already exists. Continuing.\n' % (MAPPER_NAME));
+		sys.stderr.write('[%s wrapper] Reference index already exists. Continuing.\n' % (MAPPER_NAME))
 
 	# Run the alignment process, and measure execution time and memory.
-	sys.stderr.write('[%s wrapper] Running %s...\n' % (MAPPER_NAME, MAPPER_NAME));
-	command = '%s %s/%s %s %s %s -sa %s.blasrsa -out %s' % (basicdefines.measure_command(memtime_file), ALIGNER_PATH, BIN, reads_file, reference_file, parameters, reference_file, sam_file);
-	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command));
-	subprocess.call(command, shell=True);
-	sys.stderr.write('\n\n');
-	
-	sys.stderr.write('[%s wrapper] %s wrapper script finished processing.\n' % (MAPPER_NAME, MAPPER_NAME));
+	sys.stderr.write('[%s wrapper] Running %s...\n' % (MAPPER_NAME, MAPPER_NAME))
+
+	# command = '%s %s/%s %s %s %s -sa %s.blasrsa -out %s' % (basicdefines.measure_command(memtime_file), ALIGNER_PATH, BIN, reads_file, reference_file, parameters, reference_file, sam_file)
+	# ATM doiing it without measurements
+	command = '%s/%s %s %s %s -sa %s.blasrsa -out %s' % (ALIGNER_PATH, BIN, reads_file, reference_file, parameters, reference_file, sam_file)
+
+	sys.stderr.write('[%s wrapper] %s\n' % (MAPPER_NAME, command))
+	subprocess.call(command, shell=True)
+	sys.stderr.write('\n\n')
+
+	sys.stderr.write('[%s wrapper] %s wrapper script finished processing.\n' % (MAPPER_NAME, MAPPER_NAME))
 
 	return sam_file
 

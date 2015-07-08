@@ -17,10 +17,18 @@ import re
 # and other utility stuff
 import fastqparser
 
+# To be able to generate random reads in SAM format
+import utility_sam
+
 
 CIGAR_OPERATIONS_ALL = ['M', 'I', 'D', 'N', 'S', 'H', 'P', '=', 'X'];
 CIGAR_OPERATIONS_BASIC = ['M', 'I', 'D', 'S', 'H'];
 CIGAR_OPERATIONS_EXTENDED = ['M', 'I', 'D', 'S', 'H', '=', 'X'];
+
+# CIGAR profile version number
+# Used to check if loaded profile is compatible with the current code
+# Should be changed only when new code makes old profile unusable
+PROFILE_VERSION = '1.1'
 
 
 # CIGARProfile: Class containing information about a dataset
@@ -36,15 +44,17 @@ CIGAR_OPERATIONS_EXTENDED = ['M', 'I', 'D', 'S', 'H', '=', 'X'];
 
 # CIGARLine: Class containg information about one CIGAR string
 class CIGARLine:
-    def __init__(self, cigar = '', position = -1, quality = -1, GCcontent = 0.0, quals = None):
+    def __init__(self, cigar = '', position = -1, qname = '', rname = '', quality = -1, GCcontent = 0.0, quals = None):
         self.cigar = cigar
         self.position = position
+        self.qname = qname
+        self.rname = rname
         self.quality = quality
         self.GCcontent = GCcontent          # GC content of a read that generated a CIGAR string
         self.quals = quals                  # Quality values of a read that generated a CIGAR string
 
     def toTSVstring(self):
-        tsvstring = ('%s\t%d\t%d\t%0.4f' % (self.cigar, self.position, self.quality, self.GCcontent))
+        tsvstring = ('%s\t%d\t%s\t%s\t%d\t%0.4f' % (self.cigar, self.position, self.qname, self.rname, self.quality, self.GCcontent))
 
         # Add quals if they are defined
         if self.quals is not None:
@@ -59,12 +69,14 @@ class CIGARLine:
         elements = line.split('\t')
         self.cigar = elements[0]
         self.position = int(elements[1])
-        self.quality = int(elements[2])
-        self.GCcontent = float(elements[3])
+        self.qname = elements[2]
+        self.rname  = elements[3]
+        self.quality = int(elements[4])
+        self.GCcontent = float(elements[5])
 
         # getting quals string, if it exists
-        if len(elements) > 4:
-            self.quals = elements[4]
+        if len(elements) > 6:
+            self.quals = elements[6]
 
     # Splits the CIGAR string into individual operations, in the
     # same format as the original CIGAR string is in.
@@ -99,21 +111,24 @@ class CIGARProfile:
         self.qualDistrib = None
         self.NDistrib = None
 
+        # Profile version, used to determine if loaded profile is compatible with the current code
+        self.version = PROFILE_VERSION
 
     def appendCLine(self, cline):
         if cline is None:
             raise Exception('Trying to add nonexisting CIGAR line! (%d)' % len(self.clines))
         self.clines.append(cline)
 
-    def getRandomCigar(self):
+    def getRandomCLine(self):
         rand = random.randint(0, len(self.clines)-1)
         return self.clines[rand]
 
     # ATM using all cigar lines to generate reads at random positions
     def generateRandomRead(self, reference):
-        cline = self.getRandomCigar()
+        cline = self.getRandomCLine()
         reflen = len(reference)
         readlen = cline.length()
+
         # Generate random position
         randpos = random.randint(0, reflen-readlen)
         startread = reference[randpos:randpos+readlen]
@@ -161,10 +176,25 @@ class CIGARProfile:
                 sys.stderr.write('\nInvalid CIGAR operation for generating random reads: %s\n' % optype)
                 exit(1)
 
-        # Return generated read and corresponding quals string
-        return read, cline.quals
+        # Return generated read in a form of a SAMline
+        sline = utility_sam.SAMLine()
+        sline.qname = ''
+        sline.flag = 0
+        sline.rname = ''
+        sline.pos = randpos
+        sline.mapq = 255
+        sline.cigar = cline.cigar
+        sline.mrnm = ''
+        sline.mpos = 0
+        sline.isize = 0
+        sline.seq = read
+        sline.qual = cline.quals
+        sline.original_line = ''
+
+        return sline
 
 
+    # Deprecated:
     # Separate function to generate a whole dataset faster and with less memory
     # (instead of calling generateRandomRead many times)
     def generateRandomReadsByNumber(self, reference, numreads):
@@ -173,7 +203,7 @@ class CIGARProfile:
 
         # Generating reads
         for i in xrange(numreads):
-            cline = self.getRandomCigar()
+            cline = self.getRandomCLine()
             readlen = cline.length()
             # Generate random position
             randpos = random.randint(0, reflen-readlen)
@@ -227,6 +257,7 @@ class CIGARProfile:
         return reads
 
 
+    # Deprecated:
     # Separate function to generate a whole dataset faster and with less memory
     # (instead of calling generateRandomRead many times)
     def generateRandomReadsByCoverage(self, reference, coverage):
@@ -237,7 +268,7 @@ class CIGARProfile:
         numreads = 0
 
         while True:
-            cline = self.getRandomCigar()
+            cline = self.getRandomCLine()
             readlen = cline.length()
             # Generate random position
             randpos = random.randint(0, reflen-readlen)
@@ -305,11 +336,20 @@ def loadCProfile(filepath):
         line = pfile.readline()
         # Removing '#CProfile: ' from the start and \n from the end of line
         name = line[11:-1]
+
+        # Loading CProfile version number
+        line = pfile.readline()
+        # Removing '#CProfile version: ' from the start and \n from the end of line
+        version = line[19:-1]
+        if version != PROFILE_VERSION:
+            raise Exception('Invalid profile version in %s(%s)! Expected %s' % (filepath, version, PROFILE_VERSION))
+
         # loading GC content
         line = pfile.readline()
         # Removing '#GC Content: ' from the start and \n from the end of line
         GCcontent = float(line[13:-1])
         cprofile = CIGARProfile(name, GCcontent)
+        cprofile.version = version
         cprofile.mutCntTable = {}
         # Loading mutation count table
         line = pfile.readline()
@@ -343,6 +383,8 @@ def storeCProfile(filepath, cprofile):
     with open(filepath, 'w') as pfile:
         # Writing profile name in the first line with # in front
         pfile.write('#CProfile: %s\n' % cprofile.name)
+        # Writing profile version
+        pfile.write('#CProfile version: %s\n' % cprofile.version)
         # Writing GCContent
         pfile.write('#GC Content: %0.4f\n' % cprofile.GCcontent)
         # Writing mutation count table
@@ -375,7 +417,12 @@ def generate_randomseq(length):
 # Mutate a given base
 # Uses mutCntTable to calculate probabilities if available
 def mutate(base, mutCntTable = None):
-    if mutCntTable is None:
+    # Shouldn't really happen, beacuse bases are taken from the reference
+    # This first condition was added after the program tried to mutate only 'N' base in
+    # Acinobacter Baumannii
+    if base == 'N':
+        return 'N'
+    elif mutCntTable is None:
         bases = 'ACGT'
         # Remove a given base from the list, so its not generated
         bases.replace(base, '')
@@ -392,7 +439,7 @@ def mutate(base, mutCntTable = None):
             if tmpsum > rand:
                 return base
 
-        # Somthing is wrong
+        # Something is wrong
         sys.stderr.write('\nError generating mutation according to a given distribution!')
         return 'N'
 
