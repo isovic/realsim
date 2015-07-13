@@ -13,6 +13,10 @@ import random
 # For manipulating CIGAR strings
 import re
 
+# For working wit gzip files
+# Compressing profile to reduce size and make it small enough for GitHub
+import gzip
+
 # Mainly for callculating a reverse complement of a sequence
 # and other utility stuff
 import fastqparser
@@ -331,7 +335,15 @@ class CIGARProfile:
 def loadCProfile(filepath):
 
     cprofile = None
-    with open(filepath, 'r') as pfile:
+    try:
+        if filepath.endswith('.cpf'):
+            pfile = open(filepath, 'r')
+        elif filepath.endswith('.cpf.gz'):
+            pfile = gzip.GzipFile(filepath, 'r')
+        else:
+            sys.stderr.write('\n\nInvalide CIGAR profile file extension! Exiting....\n')
+            exit(1)
+
         # loading profile name from the first line
         line = pfile.readline()
         # Removing '#CProfile: ' from the start and \n from the end of line
@@ -372,15 +384,29 @@ def loadCProfile(filepath):
             cline.fromTSVstring(line)
             cprofile.appendCLine(cline)
 
+        pfile.close()
+
     # TODO:
     # Load information about quals and Ns distribution
+    except Exception:
+        sys.stderr.write('\n\nError loading a profile!\n')
+        exit(1)
 
     return cprofile
 
 
 def storeCProfile(filepath, cprofile):
 
-    with open(filepath, 'w') as pfile:
+    pfile = None
+    try:
+        if filepath.endswith('.cpf'):
+            pfile = open(filepath, 'w')
+        elif filepath.endswith('.cpf.gz'):
+            pfile = gzip.GzipFile(filepath, 'w')
+        else:
+            sys.stderr.write('\n\nInvalide CIGAR profile file extension! Exiting....\n')
+            exit(1)
+
         # Writing profile name in the first line with # in front
         pfile.write('#CProfile: %s\n' % cprofile.name)
         # Writing profile version
@@ -400,10 +426,12 @@ def storeCProfile(filepath, cprofile):
         for cline in cprofile.clines:
             pfile.write(cline.toTSVstring() + '\n')
 
-
-    # TODO:
-    # Writing information about qual and Ns distribution
-    # ATM quals are stored within CLines
+        # TODO:
+        # Writing information about qual and Ns distribution
+        # ATM quals are stored within CLines
+        pfile.close()
+    except Exception:
+        sys.stderr.write('\n\nError storing a profile!\n')
 
 
 # Generate a sequence of random bases

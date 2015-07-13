@@ -102,7 +102,7 @@ def compare_multiple_sams(samfile_list, distance_threshold, out_summary_prefix='
         # ATM taking only sam hash, ignoring other two returned values
         samhash_list.append(sam_hash)
 
-    # TODO: Consider what to do with queries that are aligner close to the same position by different aligners
+    # TODO: Consider what to do with queries that are aligned close to the same position by different aligners
     #       But not exactly to the same position
     #       Consider whether its possible for query to be mapped to the same place with a bit different clipping
     #       makin aligned position different

@@ -33,11 +33,16 @@ profiles_path = basicdefines.PROFILES_PATH_ABS
 # if a given profile doesn't exist
 def get_cprofile_path(cprofile):
 	profile_path = os.path.join(basicdefines.PROFILES_PATH_ABS, cprofile + '.cpf')
-	if not os.path.exists(profile_path):
+	profile_path_gz = os.path.join(basicdefines.PROFILES_PATH_ABS, cprofile + '.cpf.gz')
+
+	if os.path.exists(profile_path_gz):
+		return profile_path_gz
+	elif os.path.exists(profile_path):
+		return profile_path
+	else:
 		sys.stderr.write('\n\nCIGAR profile %s doesn\'t exist! Exiting ...' % cprofile)
 		verbose_usage_and_exit()
 
-	return profile_path
 
 
 # Extracts error profile as CIGAR profile, from a SAM file
@@ -76,7 +81,7 @@ def extract_cprofile_from_SAM(reference_path, sam_path, profile='cprofile'):
 
 	cprofile.mutCntTable = utility_sam.mutCntTable
 
-	cprofilefilepath = os.path.join(profiles_path, profile + '.cpf')
+	cprofilefilepath = os.path.join(profiles_path, profile + '.cpf.gz')
 	sys.stderr.write('Saving CIGAR profile to:%s\n' % cprofilefilepath)
 	storeCProfile(cprofilefilepath, cprofile)
 
@@ -166,9 +171,6 @@ def extract_cprofile_from_dict(reference_path, samhash_list, outdict, profile='c
 					samline = samhash[qname]
 					# TODO: Revise CalcExtendedCIGAR to receive only relevant part of reference
 					cigar, gccontent = samline[0].CalcExtendedCIGARandGCContent(reference_seq)
-					if cigar == '1D1D1D1D':
-						import pdb
-						pdb.set_trace()
 					pos = samline[0].pos
 					quality = samline[0].chosen_quality
 					quals = samline[0].qual
@@ -178,7 +180,7 @@ def extract_cprofile_from_dict(reference_path, samhash_list, outdict, profile='c
 
 	cprofile.mutCntTable = utility_sam.mutCntTable
 
-	cprofilefilepath = os.path.join(profiles_path, profile + '.cpf')
+	cprofilefilepath = os.path.join(profiles_path, profile + '.cpf.gz')
 	sys.stderr.write('Saving CIGAR profile to:%s\n' % cprofilefilepath)
 	storeCProfile(cprofilefilepath, cprofile)
 
@@ -223,7 +225,7 @@ def extract_cprofile_from_2dict(reference_path, sam_hash_bwamem, sam_hash_lastal
 
 	cprofile.mutCntTable = utility_sam.mutCntTable
 
-	cprofilefilepath = os.path.join(profiles_path, profile + '.cpf')
+	cprofilefilepath = os.path.join(profiles_path, profile + '.cpf.gz')
 	sys.stderr.write('Saving CIGAR profile to:%s\n' % cprofilefilepath)
 	storeCProfile(cprofilefilepath, cprofile)
 
@@ -536,6 +538,9 @@ def get_allprofiles():
 	for filename in os.listdir(basicdefines.PROFILES_PATH_ABS):
 		if filename.endswith('.cpf'):
 			profilename = filename[:-4]
+			profiles.append(profilename)
+		elif filename.endswith('.cpf.gz'):
+			profilename = filename[:-7]
 			profiles.append(profilename)
 
 	return profiles

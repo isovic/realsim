@@ -592,7 +592,7 @@ class SAMLine:
 # considering string1 as reference and string2 as a read
 def getExtendedCIGAR(string1, string2, countMutations = True):
 	if len(string1) != len(string2):
-		raise Exception('Cannot callculate extended CIGAR for strings of different length!')
+		raise Exception('Cannot calculate extended CIGAR for strings of different length!')
 
 	match = '='
 	mismatch = 'X'
