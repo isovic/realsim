@@ -128,6 +128,7 @@ class CIGARProfile:
         return self.clines[rand]
 
     # ATM using all cigar lines to generate reads at random positions
+    # TODO: Consider the situation where reference is too short for a randomly chosen CIGAR
     def generateRandomRead(self, reference):
         cline = self.getRandomCLine()
         reflen = len(reference)
@@ -183,7 +184,8 @@ class CIGARProfile:
         # Return generated read in a form of a SAMline
         sline = utility_sam.SAMLine()
         sline.qname = ''
-        sline.flag = 0
+        sline.flag = 16 if complement else 0        # Setting forward/reverse flag
+                                                    # Ignoring other possibilities, no secondary alignments and paired reads
         sline.rname = ''
         sline.pos = randpos
         sline.mapq = 255

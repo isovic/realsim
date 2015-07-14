@@ -24,6 +24,9 @@ from samfilter import add_quality_values
 # working with CIGAR profiles
 from cigarprofile import CIGARLine, CIGARProfile, loadCProfile, storeCProfile
 
+# For generating random numbers according to an arbitrary distribution
+from utility_distrib  import Probability_Distribution
+
 # global variables for easier manipulation
 output_path = basicdefines.INTERMEDIATE_PATH_ROOT_ABS
 profiles_path = basicdefines.PROFILES_PATH_ABS
@@ -595,7 +598,7 @@ def list_alignruns():
 	sys.stderr.write('\n')
 
 
-def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = None, coverage = None, header = None, outtype = 'fastq'):
+def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = None, coverage = None, header = None, outtype = 'fastq', samfilename = None):
 
 	profile_path = get_cprofile_path(cprofile)
 
@@ -603,15 +606,19 @@ def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = Non
 	sys.stderr.write('\n')
 	sys.stderr.write('Loading reference from fastq file...\n')
 	reference_fastq = fastqparser.read_fastq(reference_path)
-	reference_seq = reference_fastq[1][0]
-	ref_header = reference_fastq[0][0]
-
-	# Header is written into every header line in simulated fastq file
-	# If not set, reference header is used
-	# Replacing spaces with underscores
-	if header == None:
-		header = ref_header
-	header = header.replace(' ', '_')
+	# Reference file can contain multiple sequences
+	# A sequence from which each random read is generated is chosen randomly
+	# with probability proportional to sequence length
+	ref_list = reference_fastq[1]
+	ref_hlist = reference_fastq[0]
+	# Calculating a sum of lengths of all references
+	reflen = sum([len(ref) for ref in ref_list])
+	# Calculating a distribution function for reference lengths
+	distrib_fun = {}
+	lastsum = 0
+	for i in range(len(ref_list)):
+		distrib_fun[i] = len(ref_list[i]) + lastsum
+		lastsum = distrib_fun[i]
 
 	# Load CProfile
 	sys.stderr.write('Loading CIGAR profile...\n')
@@ -619,7 +626,7 @@ def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = Non
 
 	readspath = os.path.join(output_path, output_file)
 
-	# Callculating number of reads from coverage if necessary
+	# Calculating number of reads from coverage if necessary
 	if numreads is None:
 		sumlength = 0
 		clines = cprofile.clines
@@ -628,18 +635,40 @@ def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = Non
 		avglength = sumlength / len(clines)
 
 		# numreads = len(reference)*coverage / avg_read_length
-		numreads = len(reference_seq) * coverage / avglength
+		numreads = reflen * coverage / avglength
 
 	# Simulating reads as a list of SAMLines
-	sys.stderr.write('Simulating reads...\n')
+	sys.stderr.write('Simulating reads from %d references of total length %d ...\n' % (len(ref_list), reflen))
 	sline_list = []
 	for i in xrange(numreads):
-		qname = '%s_simulated_read_%d' % (header, i)
-		sline = cprofile.generateRandomRead(reference_seq)
+		# Choosing a reference
+		randpos = random.randint(0, reflen)
+		for refind in sorted(distrib_fun.keys()):
+			if distrib_fun[refind] > randpos:
+				break
+
+		# at this point variable refind should contain the index of a randomly chosen reference
+		assert(refind >= 0 and refind < len(ref_list))
+
+		refseq = ref_list[refind]
+		refheader = ref_hlist[refind]
+
+		# Header is written into every header line in simulated fastq file
+		# If not set, reference header is used
+		# Replacing spaces with underscores to comply with fasta/fastq standard headers
+		if header == None:
+			simheader = refheader
+		else:
+			simheader = header
+		simheader = simheader.replace(' ', '_')
+
+		qname = '%s_simulated_read_%d' % (simheader, i)
+		sline = cprofile.generateRandomRead(refseq)
 		sline.qname = qname
-		sline.rname = header
+		sline.rname = simheader
 		sline_list.append(sline)
 
+	# Writing reads to file(s)
 	sys.stderr.write('Writting reads to a file...\n')
 	if outtype == 'fastq':
 		firstchar = '@'
@@ -660,16 +689,19 @@ def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = Non
 				qname = sline.qname
 				readsfile.write(firstchar + qname + '\n')
 				readsfile.write(read + '\n')
-	elif outtype == 'sam':
-		# Writting sam file
-		# TODO: Put this somewhere in a function
-		with open(readspath, 'w') as readsfile:
-			readsfile.write('@HD\tVN:%s\tSO:unsorted\n' % cprofile.version)
-			for sline in sline_list:
-				readsfile.write(sline.tabDelimited())
 	else:
 		sys.stderr.write('\n\nInvalid outtype while simulating reads with CProfile! Exiting ...\n')
 		exit(1)
+
+	# If so specified, writting to SAM file as well
+	if samfilename and samfilename != '':
+		sampath = os.path.join(output_path, samfilename)
+		# Writting sam file
+		# TODO: Put this somewhere in a function in utility_sam
+		with open(sampath, 'w') as samfile:
+			samfile.write('@HD\tVN:%s\tSO:unsorted\n' % cprofile.version)
+			for sline in sline_list:
+				samfile.write(sline.tabDelimited())
 
 
 def spike_with_cprofile(cprofile, reference_path, reads_file,  output_file, numreads = None, coverage = None, header = None, fastq = True):
@@ -1036,7 +1068,8 @@ if __name__ == '__main__':
 			sys.stderr.write('\t\t-h header\n')
 			sys.stderr.write('\t\t-n number_of_reads\n')
 			sys.stderr.write('\t\t-c coverage\n')
-			sys.stderr.write('\t\t-t type (fasta, fatsq or sam, fastq is default)\n')
+			sys.stderr.write('\t\t-sam true/false - generate a SAM file containing reads together with a fasta/fastq file (default is false)\n')
+			sys.stderr.write('\t\t-t type (fasta, fatsq)\n')
 			sys.stderr.write('\n')
 			exit(1)
 
@@ -1048,10 +1081,13 @@ if __name__ == '__main__':
 		# Format can also be specified by parameter -t. Parameter is stronger then file extension.
 		# If nothing is specified, fastq reads are generated
 		outtype = 'fastq'
+		generatesam = False
 		if output_file.endswith('.fa') or output_file.endswith('.fasta'):
 			outtype = 'fasta'
-		elif output_file.endswith('.sam'):
-			outtype = 'sam'
+		if output_file.endswith('.sam'):
+			generatesam = True
+			outtype = 'fastq'
+			output_file = output_file.replace('.sam', '.fq')
 
 		# parsing options
 		header = numreads = coverage = None
@@ -1070,10 +1106,19 @@ if __name__ == '__main__':
 				except:
 					sys.stderr.write('Wrong value for parameter "coverage"! Value needs to be an int.\n\n')
 					exit()
+			elif sys.argv[i] == '-sam':
+				arg2 = sys.argv[i+1].lower()
+				if arg2 == 'true':
+					generatesam = True
+				elif arg2 == 'false':
+					generatesam = False
+				else:
+					sys.stderr.write('Parameter -sam goes with either \'True\' or \'False\'.\n\n')
+					exit()
 			elif sys.argv[i] == '-t':
 				outtype = sys.argv[i+1].lower()
 				if outtype not in ('fastq', 'fasta', 'sam'):
-					sys.stderr.write('Parameter -t goes with \'fasta\', \'fastq\' or \'sam\'.\n\n')
+					sys.stderr.write('Parameter -t goes with either \'fasta\' or \'fastq\'.\n\n')
 					exit()
 			else:
 				sys.stderr.write('Invalid parameter!.\n\n')
@@ -1083,8 +1128,12 @@ if __name__ == '__main__':
 			sys.stderr.write('Either "coverage" or "number of reads" parameter must be specified.\n\n')
 			exit()
 
-		simulate_with_cprofile(profile_path, reference_path, output_file, numreads, coverage, header, outtype)
+		samfilename = None
+		if generatesam:
+			samfilename = os.path.splitext(output_file)[0] + '.sam'
+		simulate_with_cprofile(profile_path, reference_path, output_file, numreads, coverage, header, outtype, samfilename)
 
+	# TODO: Make spike interface work similar to simulate
 	elif (mode == 'spike_with_CProfile'):
 		if (len(sys.argv) != 6):
 			sys.stderr.write('Applies an extracted CIGAR profile to a given reference in order to simulate reads.\n')
