@@ -121,13 +121,14 @@ def compare_multiple_sams(samfile_list, distance_threshold, out_summary_prefix='
         posdict = {}
         for i in range(len(samhash_list)):
             samhash = samhash_list[i]
-            samline = samhash[qname][0]
-            pos = samline.pos
+            if qname in samhash:
+                samline = samhash[qname][0]     # Looking only at the best alignment
+                pos = samline.pos
 
-            if pos in posdict.keys():
-                posdict[pos].append(i)
-            else:
-                posdict[pos] = [i]
+                if pos in posdict.keys():
+                    posdict[pos].append(i)
+                else:
+                    posdict[pos] = [i]
 
         outdict[qname] = posdict
 

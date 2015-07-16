@@ -1,13 +1,13 @@
 #Summary
-#Generated on	Fri Jul 03 15:55:37 CEST 2015
+#Generated on	Wed Jul 15 11:47:26 CEST 2015
 #Version	5
 chroms	1
-bases	2200406
-defined	2184406
+bases	4657652
+defined	4641652
 undefined	16000
 contigs	1
 scaffolds	1
 interpad	300
-source	/home/kkrizanovic/sim/CCS/sd_0020.ref
-bytes	2215707
-last modified	1424801170000
+source	/home/kkrizanovic/genomes/reference/escherichia_coli_K12_MG1655/ecoli_K12_MG1655_U00096.3.fasta
+bytes	4708049
+last modified	1436952547000

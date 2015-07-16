@@ -26,20 +26,21 @@ MAPPER_NAME = 'GraphMap'
 #	output_path			Folder to which the output will be placed to. Filename will be automatically generated according to the name of the mapper being run.
 #	output_suffix		A custom suffix that can be added to the output filename.
 def run(reads_file, reference_file, machine_name, output_path, output_suffix=''):
-	parameters = '';
-	num_threads = multiprocessing.cpu_count() / 2;
+	parameters = ''
+	num_threads = multiprocessing.cpu_count() / 2
 
 	if ((machine_name.lower() == 'illumina') or (machine_name.lower() == 'roche')):
-		# parameters = '-x illumina -v 5 -b 4 -B 0';
-		parameters = '-x illumina -v 5 -t %d -B 0 -b 3' % num_threads;
+		# parameters = '-x illumina -v 5 -b 4 -B 0'
+		parameters = '-x illumina -v 5 -t %d -B 0 -b 3' % num_threads
 
 	elif ((machine_name.lower() == 'pacbio')):
-		# parameters = '-v 5 -b 4 -B 0';
-		parameters = '-v 5 -t %d -B 0 -b 3' % num_threads;
+		# parameters = '-v 5 -b 4 -B 0'
+		parameters = '-v 5 -t %d -B 0 -b 3' % num_threads
 
 	elif ((machine_name.lower() == 'nanopore')):
-		# parameters = '-x nanopore -v 5 -b 4 -B 0';
-		parameters = '-v 5 -t %d -B 0 -b 3 -w anchor' % num_threads;
+		# parameters = '-x nanopore -v 5 -b 4 -B 0'
+		# parameters = '-v 5 -t %d -B 0 -b 3 -w anchor' % num_threads
+		parameters = '-v 5 -t %d -B 0 -b 3 -a anchor' % num_threads;
 
 	elif ((machine_name.lower() == 'nanoporecirc')):
 		# parameters = '-x nanopore -v 5 -b 4 -B 0';
@@ -125,8 +126,9 @@ def download_and_install():
 	subprocess.call(command, shell='True');
 	sys.stderr.write('\n');
 
-	sys.stderr.write('[%s wrapper] Checking out commit "47549fefed03a90cdd1079264eebac2132207333" for reproducibility purposes.\n' % (MAPPER_NAME));
-	command = 'cd %s; git checkout 47549fefed03a90cdd1079264eebac2132207333' % (ALIGNER_PATH);
+	sys.stderr.write('[%s wrapper] Checking out commit "4d04c1b511f35d232c92bcd8ece5369e55f95aef" for reproducibility purposes.\n' % (MAPPER_NAME));
+	# command = 'cd %s; git checkout 47549fefed03a90cdd1079264eebac2132207333' % (ALIGNER_PATH);
+	command = 'cd %s; git checkout 4d04c1b511f35d232c92bcd8ece5369e55f95aef' % (ALIGNER_PATH);
 	subprocess.call(command, shell='True');
 	sys.stderr.write('\n');
 

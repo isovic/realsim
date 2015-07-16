@@ -48,7 +48,7 @@ def get_cprofile_path(cprofile):
 
 
 
-# Extracts error profile as CIGAR profile, from a SAM file
+# s error profile as CIGAR profile, from a SAM file
 # Considers only the best alignment for each SAM line and
 # considers only SAM lines whose chosen quality is greater then 0
 def extract_cprofile_from_SAM(reference_path, sam_path, profile='cprofile'):
@@ -71,9 +71,10 @@ def extract_cprofile_from_SAM(reference_path, sam_path, profile='cprofile'):
 	for qname in sam_hash.iterkeys():
 		samline = sam_hash[qname]
 		quality = samline[0].chosen_quality
-		# Skipping SAM lines with quality 0 and 255
-		# GraphMap generates SAM lines qith quality 255 that have empty CIGAR string
-		if quality > 0 and quality < 255:
+		cigar = samline[0].cigar
+		# Skipping SAM lines with quality 0 and lines with cigar = '*'
+		# GraphMap generates SAM lines with quality 255 that have CIGAR string '*'
+		if quality > 0 and cigar != '*':
 			# TODO: Revise CalcExtendedCIGAR to receive only relevant part of reference
 			cigar, gccontent = samline[0].CalcExtendedCIGARandGCContent(reference_seq)
 			pos = samline[0].pos
@@ -88,6 +89,7 @@ def extract_cprofile_from_SAM(reference_path, sam_path, profile='cprofile'):
 	sys.stderr.write('Saving CIGAR profile to:%s\n' % cprofilefilepath)
 	storeCProfile(cprofilefilepath, cprofile)
 
+
 # Deprecated:
 # Can be done using extract_profile_from_path by specifying only one aligner
 def extract_cprofile_with_LAST(reference_path, reads_path, technology, profile='cprofile'):
@@ -99,14 +101,15 @@ def extract_cprofile_with_LAST(reference_path, reads_path, technology, profile='
 
 	# copy reference to output path with the same uuid
 	ref_filename = "REF_" + uuid_string + ".fastq"
-	new_ref_path = os.path.join(output_path, ref_filename)
+	new_output_path = os.path.join(output_path, 'run_' + uuid_string)
+	new_ref_path = os.path.join(new_output_path, ref_filename)
 	shutil.copy(reference_path, new_ref_path)
 
-	if (not os.path.exists(output_path)):
-		sys.stderr.write('Creating folder "%s".\n' % (output_path))
-		os.makedirs(output_path)
+	if (not os.path.exists(new_output_path)):
+		sys.stderr.write('Creating folder "%s".\n' % (new_output_path))
+		os.makedirs(new_output_path)
 
-	sam_path_lastal = wrapper_lastal.run(reads_path, reference_path, technology, output_path, uuid_string)
+	sam_path_lastal = wrapper_lastal.run(reads_path, reference_path, technology, new_output_path, uuid_string)
 
 	basename = os.path.basename(sam_path_lastal)
 	dirname = os.path.dirname(sam_path_lastal)
@@ -168,10 +171,15 @@ def extract_cprofile_from_dict(reference_path, samhash_list, outdict, profile='c
 		for (pos, idxlist) in posdict.iteritems():
 			if len(idxlist) > 1:
 				# Build profile prom all aligments to the same position
+				# However, it is possible for two aligners to ne unable to align a read
+				# resulting in pos = 0 and cigar = '*'
+				# Such alignements need to be skipped
 				for i in idxlist:
 					samhash = samhash_list[i]
 
 					samline = samhash[qname]
+					if samline[0].cigar == '*':		# Skipping unaligned reads that were left in the SAM file
+						break
 					# TODO: Revise CalcExtendedCIGAR to receive only relevant part of reference
 					cigar, gccontent = samline[0].CalcExtendedCIGARandGCContent(reference_seq)
 					pos = samline[0].pos
@@ -417,12 +425,14 @@ def align(reference_path, reads_path, technology, aligners = ['lastal', 'bwamem'
 
 	# copy reference to output path with the same uuid
 	ref_filename = "REF_" + uuid_string + ".fastq"
-	new_ref_path = os.path.join(output_path, ref_filename)
-	shutil.copy(reference_path, new_ref_path)
+	new_output_path = os.path.join(output_path, 'run_' + uuid_string)
+	new_ref_path = os.path.join(new_output_path, ref_filename)
 
-	if (not os.path.exists(output_path)):
-		sys.stderr.write('Creating folder "%s".\n' % (output_path))
-		os.makedirs(output_path)
+	if (not os.path.exists(new_output_path)):
+		sys.stderr.write('Creating folder "%s".\n' % (new_output_path))
+		os.makedirs(new_output_path)
+
+	shutil.copy(reference_path, new_ref_path)
 
 	sys.stderr.write('\n\nAligning reads to reference:')
 	# Run alignment for each given aligner
@@ -431,9 +441,9 @@ def align(reference_path, reads_path, technology, aligners = ['lastal', 'bwamem'
 		wrapper_basename = 'wrapper_' + aligner
 
 		samfile = ''
-		command = 'import %s; samfile = %s.run(reads_path, reference_path, technology, output_path, uuid_string)' % (wrapper_basename, wrapper_basename)
-		samfile_list.append(samfile)
+		command = 'import %s; samfile = %s.run(reads_path, reference_path, technology, new_output_path, uuid_string)' % (wrapper_basename, wrapper_basename)
 		exec(command)
+		samfile_list.append(samfile)
 
 	sys.stderr.write('\n')
 
@@ -529,13 +539,16 @@ def calculate_statistics(reference_path, sam_path_bwamem, sam_path_lastal):
 
 # Cleans up intermediate files by deleting all files in the corresponding folder
 def cleanup():
-	sys.stdout.write('\nRemoving intermediate files%s!')
+	sys.stdout.write('\nRemoving intermediate files!...')
 	for filename in os.listdir(basicdefines.INTERMEDIATE_PATH_ROOT_ABS):
 		path = os.path.join(basicdefines.INTERMEDIATE_PATH_ROOT_ABS, filename)
 		sys.stdout.write('\nRemoving: %s' % path)
 		os.remove(path)
 
-# A helper function that return all available profiles from 'profiles' folder
+	sys.stderr.write('\n')
+
+
+# A helper function that returns all available profiles from 'profiles' folder
 def get_allprofiles():
 	profiles = []
 	for filename in os.listdir(basicdefines.PROFILES_PATH_ABS):

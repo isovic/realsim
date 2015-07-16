@@ -380,9 +380,7 @@ class SAMLine:
 		GCcontent = 0.0
 		GCcount = 0
 		length = self.CalcReferenceLengthFromCigar()
-		if length == 0:
-			import pdb
-			pdb.set_trace()
+		assert length > 0
 		extcigar = ''
 		operations = self.SplitCigar()
 		refpos = self.pos-1	# start of alignment within referece, clipped bases are skipped

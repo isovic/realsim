@@ -477,6 +477,8 @@ def add_quality_values(sam_file, fastq_file, out_filtered_sam_file):
 			# '/1' should be found, both enteries should exist or neither
 		else:
 			sys.stderr.write('ERROR: Reads file and SAM file do not match! Exiting.\n');
+			import pdb
+			pdb.set_trace()
 			exit(1);
 		read_qual = quals[read_id]
 		if (read_qual == None or len(read_qual) == 0):

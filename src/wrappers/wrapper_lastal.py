@@ -140,6 +140,9 @@ def run(reads_file, reference_file, machine_name, output_path, output_suffix='')
 	sys.stderr.write('[%s wrapper] Adding quality values...\n' % MAPPER_NAME)
 	add_quality_values(tmpsam_file, reads_file, sam_file)
 
+	# Removing temp SAM file beacuse it seems that maf-convert cannot overwrite existing file
+	os.remove(tmpsam_file)
+
 	sys.stderr.write('[%s wrapper] %s wrapper script finished processing.\n' % (MAPPER_NAME, MAPPER_NAME))
 
 	return sam_file
