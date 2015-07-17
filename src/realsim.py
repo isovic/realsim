@@ -1083,12 +1083,15 @@ if __name__ == '__main__':
 			sys.stderr.write('\t\t-c coverage\n')
 			sys.stderr.write('\t\t-sam true/false - generate a SAM file containing reads together with a fasta/fastq file (default is false)\n')
 			sys.stderr.write('\t\t-t type (fasta, fatsq)\n')
+			sys.stderr.write('\t\t-seed INT - set a seed number for the random number generator, for reproducibility\n')
 			sys.stderr.write('\n')
 			exit(1)
 
 		profile_path = sys.argv[2]
 		reference_path = sys.argv[3]
 		output_file = sys.argv[4]
+
+		seed = None
 
 		# Look at extension of the output file to decide whether to generate reads in fasta or fastq format
 		# Format can also be specified by parameter -t. Parameter is stronger then file extension.
@@ -1133,9 +1136,16 @@ if __name__ == '__main__':
 				if outtype not in ('fastq', 'fasta', 'sam'):
 					sys.stderr.write('Parameter -t goes with either \'fasta\' or \'fastq\'.\n\n')
 					exit()
+			elif sys.argv[i] == '-seed':
+				seed = int(sys.argv[i+1])
 			else:
 				sys.stderr.write('Invalid parameter!.\n\n')
-				exit()
+				verbose_usage_and_exit()
+
+		if seed:
+			random.seed(seed)
+		else:
+			random.seed()
 
 		if numreads is None and coverage is None:
 			sys.stderr.write('Either "coverage" or "number of reads" parameter must be specified.\n\n')
