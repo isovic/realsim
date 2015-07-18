@@ -140,8 +140,8 @@ class CIGARProfile:
 
         # 50% of the time generate reverse complement sequence
         complement = random.choice((True, False))
-        if complement:
-            startread = fastqparser.revcomp_seq(startread)
+        # if complement:
+        #     startread = fastqparser.revcomp_seq(startread)
 
         read = ''
         pos = 0         # Where in the starting read are we currently positioned

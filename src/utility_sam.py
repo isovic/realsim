@@ -72,7 +72,7 @@ class SAMLine:
 		rname = self.rname
 		if rname == '':
 			rname = '*'
-		pos = str(self.pos)
+		pos = str(self.pos + 1)                 # Position field in the SAM file is 1-based.
 		mapq = str(self.mapq)
 		cigar = self.cigar
 		if cigar == '':

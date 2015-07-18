@@ -687,9 +687,10 @@ def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = Non
 		firstchar = '@'
 		with open(readspath, 'w') as readsfile:
 			for sline in sline_list:
-				read = sline.seq
-				quals = sline.qual
-				qname = sline.qname
+				read = sline.seq if (sline.IsReverse() == False) else fastqparser.revcomp_seq(sline.seq)
+				quals = sline.qual if (sline.IsReverse() == False) else sline.qual[::-1]
+				# read = sline.seq
+				# qname = sline.qname
 				readsfile.write(firstchar + qname + '\n')
 				readsfile.write(read + '\n')
 				readsfile.write('+' + qname + '\n')
@@ -698,7 +699,8 @@ def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = Non
 		firstchar = '>'
 		with open(readspath, 'w') as readsfile:
 			for sline in sline_list:
-				read = sline.seq
+				read = sline.seq if (sline.IsReverse() == False) else fastqparser.revcomp_seq(sline.seq)
+				# read = sline.seq
 				qname = sline.qname
 				readsfile.write(firstchar + qname + '\n')
 				readsfile.write(read + '\n')
