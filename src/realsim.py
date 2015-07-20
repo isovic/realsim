@@ -690,7 +690,7 @@ def simulate_with_cprofile(cprofile, reference_path, output_file, numreads = Non
 				read = sline.seq if (sline.IsReverse() == False) else fastqparser.revcomp_seq(sline.seq)
 				quals = sline.qual if (sline.IsReverse() == False) else sline.qual[::-1]
 				# read = sline.seq
-				# qname = sline.qname
+				qname = sline.qname
 				readsfile.write(firstchar + qname + '\n')
 				readsfile.write(read + '\n')
 				readsfile.write('+' + qname + '\n')
